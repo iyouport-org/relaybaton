@@ -1,4 +1,4 @@
-package main
+package relaybaton
 
 import (
 	"bytes"
@@ -26,9 +26,13 @@ type Server struct {
 	Peer
 }
 
-func NewServer(wsConn *websocket.Conn) *Server {
+type Handler struct {
+	Conf Config
+}
+
+func NewServer(conf Config, wsConn *websocket.Conn) *Server {
 	server := &Server{}
-	server.Init()
+	server.Init(conf)
 	server.wsConn = wsConn
 
 	return server
@@ -54,20 +58,20 @@ func (server *Server) Run() {
 	}
 }
 
-func ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 	}
-	err := Authenticate(r.Header)
+	err := handler.Authenticate(r.Header)
 	if err != nil {
 		log.Error(err)
-		Redirect(&w, r)
+		handler.Redirect(&w, r)
 		return
 	}
 	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
-		Redirect(&w, r)
+		handler.Redirect(&w, r)
 		return
 	}
 	wsConn.EnableWriteCompression(true)
@@ -76,7 +80,7 @@ func ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 		return
 	}
-	server := NewServer(wsConn)
+	server := NewServer(handler.Conf, wsConn)
 	go server.Run()
 }
 
@@ -143,7 +147,7 @@ func (server *Server) handleWsReadServer(content []byte) {
 	}
 }
 
-func Authenticate(header http.Header) error {
+func (handler Handler) Authenticate(header http.Header) error {
 	username := header.Get("username")
 	auth := header.Get("auth")
 	cipherText, err := hex.DecodeString(auth)
@@ -152,7 +156,7 @@ func Authenticate(header http.Header) error {
 		return err
 	}
 	h := sha256.New()
-	h.Write([]byte(GetPassword(username)))
+	h.Write([]byte(handler.GetPassword(username)))
 	key := h.Sum(nil)
 	nonce, _ := hex.DecodeString("64a9433eae7ccceee2fc0eda")
 	block, err := aes.NewCipher(key)
@@ -178,9 +182,9 @@ func Authenticate(header http.Header) error {
 	return nil
 }
 
-func GetPassword(username string) string {
+func (handler Handler) GetPassword(username string) string {
 	//TODO
-	return conf.Client.Password
+	return handler.Conf.Client.Password
 }
 
 func NsLookup(domain string) (net.IP, byte, error) {
@@ -227,8 +231,8 @@ func NsLookup(domain string) (net.IP, byte, error) {
 	return dstAddr, 0, err
 }
 
-func Redirect(w *http.ResponseWriter, r *http.Request) {
-	newReq, err := http.NewRequest(r.Method, "https://"+conf.Server.Pretend+r.RequestURI, r.Body)
+func (handler Handler) Redirect(w *http.ResponseWriter, r *http.Request) {
+	newReq, err := http.NewRequest(r.Method, "https://"+handler.Conf.Server.Pretend+r.RequestURI, r.Body)
 	if err != nil {
 		log.Error(err)
 		return

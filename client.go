@@ -1,4 +1,4 @@
-package main
+package relaybaton
 
 import (
 	"compress/flate"
@@ -27,9 +27,9 @@ type Client struct {
 	Peer
 }
 
-func NewClient() (*Client, error) {
+func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
-	client.Init()
+	client.Init(conf)
 
 	u := url.URL{
 		Scheme: "wss",
@@ -50,7 +50,7 @@ func NewClient() (*Client, error) {
 		EnableCompression: true,
 	}
 
-	header, err := BuildHeader()
+	header, err := BuildHeader(conf)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -72,7 +72,7 @@ func NewClient() (*Client, error) {
 }
 
 func (client *Client) Run() {
-	sl, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(conf.Client.Port))
+	sl, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
 	if err != nil {
 		log.Error(err)
 		return
@@ -183,8 +183,8 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 	}
 }
 
-func Dial(address string) (net.Conn, error) {
-	rawConn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(conf.Client.Port))
+func (client *Client) Dial(address string) (net.Conn, error) {
+	rawConn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -297,7 +297,7 @@ func ServeSocks5(conn *net.Conn, wsw *WebSocketWriter) error {
 	return nil
 }
 
-func BuildHeader() (http.Header, error) {
+func BuildHeader(conf Config) (http.Header, error) {
 	header := http.Header{}
 	h := sha256.New()
 	h.Write([]byte(conf.Client.Password))

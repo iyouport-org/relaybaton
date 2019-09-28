@@ -3,9 +3,9 @@ log_file="./log.txt"
 [client]
 server="onoketa.me"
 port=1081
-username="abcdefg"
-password="test"
+username="username"
+password="password"
 
 [server]
 port=80
-pretend="www.google.com"
+pretend="www.kernel.org"

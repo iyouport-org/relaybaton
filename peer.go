@@ -1,6 +1,7 @@
-package main
+package relaybaton
 
 import (
+	"encoding/binary"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -15,14 +16,16 @@ type Peer struct {
 	hasMessage   chan byte
 	quit         chan byte
 	wsConn       *websocket.Conn
+	conf         Config
 }
 
-func (peer *Peer) Init() {
+func (peer *Peer) Init(conf Config) {
 	peer.hasMessage = make(chan byte, 2^32+2^16)
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
 	peer.connPool = NewConnectionPool()
 	peer.quit = make(chan byte, 3)
+	peer.conf = conf
 }
 
 func (peer *Peer) Forward(session uint16) {
@@ -128,4 +131,10 @@ func (peer *Peer) Close() {
 	peer.quit <- 0
 	peer.quit <- 1
 	peer.quit <- 2
+}
+
+func Uint16ToBytes(n uint16) []byte {
+	buf := make([]byte, 2)
+	binary.BigEndian.PutUint16(buf, n)
+	return buf
 }

@@ -1,4 +1,4 @@
-package main
+package relaybaton
 
 type Config struct {
 	LogFile string       `mapstructure:"log_file"`
