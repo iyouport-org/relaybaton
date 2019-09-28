@@ -1,7 +1,7 @@
 log_file="./log.txt"
 
 [client]
-server="onoketa.me"
+server="example.com"
 port=1081
 username="username"
 password="password"

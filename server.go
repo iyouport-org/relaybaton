@@ -249,6 +249,10 @@ func (handler Handler) Redirect(w *http.ResponseWriter, r *http.Request) {
 		(*w).Header().Set(k, v[0])
 	}
 	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 	err = resp.Body.Close()
 	if err != nil {
 		log.Error(err)
