@@ -1,0 +1,11 @@
+log_file="./log.txt"
+
+[client]
+server="onoketa.me"
+port=1081
+username="abcdefg"
+password="test"
+
+[server]
+port=80
+pretend="www.google.com"
