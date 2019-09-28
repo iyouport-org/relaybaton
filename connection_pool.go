@@ -11,7 +11,7 @@ type connectionPool struct {
 	closeSent [65535]bool
 }
 
-func NewConnectionPool() *connectionPool {
+func newConnectionPool() *connectionPool {
 	cp := &connectionPool{}
 	i := 0
 	for i < 65535 {

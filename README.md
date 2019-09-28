@@ -63,9 +63,10 @@ pretend="www.kernel.org"
 |  server.pretend 	|   String  	| domain name 	| the domain name of the website that the server pretend to be 	|
 
 ### Server
+```sudo``` is required for listening on port 80
 
 ```bash
-relaybation server
+sudo relaybation server
 ```
 
 ### Client

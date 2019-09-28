@@ -12,6 +12,7 @@ type webSocketWriter struct {
 	peer    *peer
 }
 
+// Write the given data to the queue waiting to be sent
 func (wsw webSocketWriter) Write(p []byte) (n int, err error) {
 	conn := wsw.peer.connPool.get(wsw.session)
 	if conn == nil {

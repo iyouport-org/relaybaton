@@ -23,7 +23,7 @@ func (peer *peer) init(conf Config) {
 	peer.hasMessage = make(chan byte, 2^32+2^16)
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
-	peer.connPool = NewConnectionPool()
+	peer.connPool = newConnectionPool()
 	peer.quit = make(chan byte, 3)
 	peer.conf = conf
 }

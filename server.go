@@ -22,14 +22,12 @@ import (
 	"time"
 )
 
+// Server of relaybaton
 type Server struct {
 	peer
 }
 
-type Handler struct {
-	Conf Config
-}
-
+// NewServer creates a new server using the given config and websocket connection.
 func NewServer(conf Config, wsConn *websocket.Conn) *Server {
 	server := &Server{}
 	server.init(conf)
@@ -38,6 +36,7 @@ func NewServer(conf Config, wsConn *websocket.Conn) *Server {
 	return server
 }
 
+// Run start a server
 func (server *Server) Run() {
 	go server.peer.processQueue()
 
@@ -56,32 +55,6 @@ func (server *Server) Run() {
 			go server.handleWsReadServer(content)
 		}
 	}
-}
-
-func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.Upgrader{
-		EnableCompression: true,
-	}
-	err := handler.authenticate(r.Header)
-	if err != nil {
-		log.Error(err)
-		handler.redirect(&w, r)
-		return
-	}
-	wsConn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Error(err)
-		handler.redirect(&w, r)
-		return
-	}
-	wsConn.EnableWriteCompression(true)
-	err = wsConn.SetCompressionLevel(flate.BestCompression)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	server := NewServer(handler.Conf, wsConn)
-	go server.Run()
 }
 
 func (server *Server) handleWsReadServer(content []byte) {
@@ -147,6 +120,38 @@ func (server *Server) handleWsReadServer(content []byte) {
 	}
 }
 
+// Handler pass config to ServeHTTP()
+type Handler struct {
+	Conf Config
+}
+
+// ServerHTTP accept incoming HTTP request, establish websocket connections, and a new server for handling the connection. If authentication failed, the request will be redirected to the website set in the configuration file.
+func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		EnableCompression: true,
+	}
+	err := handler.authenticate(r.Header)
+	if err != nil {
+		log.Error(err)
+		handler.redirect(&w, r)
+		return
+	}
+	wsConn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Error(err)
+		handler.redirect(&w, r)
+		return
+	}
+	wsConn.EnableWriteCompression(true)
+	err = wsConn.SetCompressionLevel(flate.BestCompression)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	server := NewServer(handler.Conf, wsConn)
+	go server.Run()
+}
+
 func (handler Handler) authenticate(header http.Header) error {
 	username := header.Get("username")
 	auth := header.Get("auth")
@@ -185,6 +190,40 @@ func (handler Handler) authenticate(header http.Header) error {
 func (handler Handler) getPassword(username string) string {
 	//TODO
 	return handler.Conf.Client.Password
+}
+
+func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
+	newReq, err := http.NewRequest(r.Method, "https://"+handler.Conf.Server.Pretend+r.RequestURI, r.Body)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	for k, v := range r.Header {
+		newReq.Header.Set(k, v[0])
+	}
+	resp, err := http.DefaultClient.Do(newReq)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	for k, v := range resp.Header {
+		(*w).Header().Set(k, v[0])
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	_, err = (*w).Write(body)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 }
 
 func nsLookup(domain string) (net.IP, byte, error) {
@@ -229,38 +268,4 @@ func nsLookup(domain string) (net.IP, byte, error) {
 
 	err = errors.New("DNS error")
 	return dstAddr, 0, err
-}
-
-func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
-	newReq, err := http.NewRequest(r.Method, "https://"+handler.Conf.Server.Pretend+r.RequestURI, r.Body)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	for k, v := range r.Header {
-		newReq.Header.Set(k, v[0])
-	}
-	resp, err := http.DefaultClient.Do(newReq)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	for k, v := range resp.Header {
-		(*w).Header().Set(k, v[0])
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	_, err = (*w).Write(body)
-	if err != nil {
-		log.Error(err)
-		return
-	}
 }

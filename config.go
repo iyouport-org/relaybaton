@@ -1,19 +1,20 @@
 package relaybaton
 
+// Config is the struct mapped from the configuration file
 type Config struct {
 	LogFile string       `mapstructure:"log_file"`
-	Client  ClientConfig `mapstructure:"client"`
-	Server  ServerConfig `mapstructure:"server"`
+	Client  clientConfig `mapstructure:"client"`
+	Server  serverConfig `mapstructure:"server"`
 }
 
-type ClientConfig struct {
+type clientConfig struct {
 	Server   string `mapstructure:"server"`
 	Port     int    `mapstructure:"port"`
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
 }
 
-type ServerConfig struct {
+type serverConfig struct {
 	Port    int    `mapstructure:"port"`
 	Pretend string `mapstructure:"pretend"`
 }

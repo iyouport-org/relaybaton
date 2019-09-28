@@ -23,10 +23,12 @@ import (
 	"time"
 )
 
+// Client of relaybaton
 type Client struct {
 	peer
 }
 
+// NewClient creates a new client using the given config.
 func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
 	client.init(conf)
@@ -71,6 +73,7 @@ func NewClient(conf Config) (*Client, error) {
 	return client, nil
 }
 
+// Run start a client
 func (client *Client) Run() {
 	sl, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
 	if err != nil {
@@ -95,6 +98,53 @@ func (client *Client) Run() {
 			go client.handleWsReadClient(content, client.wsConn)
 		}
 	}
+}
+
+// Dial to the given address from the client and return the connection
+func (client *Client) Dial(address string) (net.Conn, error) {
+	rawConn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	negotiationRequest := socks5.NewNegotiationRequest([]byte{socks5.MethodNone})
+	err = negotiationRequest.WriteTo(rawConn)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	negotiationReply, err := socks5.NewNegotiationReplyFrom(rawConn)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	if negotiationReply.Method != socks5.MethodNone {
+		err = errors.New("unsupported method")
+		log.Error(err)
+		return nil, err
+	}
+	atyp, addr, port, err := resolve(address)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	request := socks5.NewRequest(socks5.CmdConnect, atyp, addr, uint16ToBytes(port))
+	err = request.WriteTo(rawConn)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	reply, err := socks5.NewReplyFrom(rawConn)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	if reply.Rep != socks5.RepSuccess {
+		err = errors.New("request fail")
+		log.WithField("code", reply.Rep).Error(err)
+		return nil, err
+	}
+	return rawConn, nil
 }
 
 func (client *Client) listenSocks(sl net.Listener) {
@@ -181,52 +231,6 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 		session := prefix
 		client.receive(session, b[2:])
 	}
-}
-
-func (client *Client) Dial(address string) (net.Conn, error) {
-	rawConn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	negotiationRequest := socks5.NewNegotiationRequest([]byte{socks5.MethodNone})
-	err = negotiationRequest.WriteTo(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	negotiationReply, err := socks5.NewNegotiationReplyFrom(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	if negotiationReply.Method != socks5.MethodNone {
-		err = errors.New("unsupported method")
-		log.Error(err)
-		return nil, err
-	}
-	atyp, addr, port, err := resolve(address)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	request := socks5.NewRequest(socks5.CmdConnect, atyp, addr, uint16ToBytes(port))
-	err = request.WriteTo(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	reply, err := socks5.NewReplyFrom(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	if reply.Rep != socks5.RepSuccess {
-		err = errors.New("request fail")
-		log.WithField("code", reply.Rep).Error(err)
-		return nil, err
-	}
-	return rawConn, nil
 }
 
 func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
