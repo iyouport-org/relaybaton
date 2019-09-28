@@ -23,7 +23,7 @@ import (
 )
 
 type Server struct {
-	Peer
+	peer
 }
 
 type Handler struct {
@@ -32,14 +32,14 @@ type Handler struct {
 
 func NewServer(conf Config, wsConn *websocket.Conn) *Server {
 	server := &Server{}
-	server.Init(conf)
+	server.init(conf)
 	server.wsConn = wsConn
 
 	return server
 }
 
 func (server *Server) Run() {
-	go server.Peer.ProcessQueue()
+	go server.peer.processQueue()
 
 	for {
 		select {
@@ -62,16 +62,16 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 	}
-	err := handler.Authenticate(r.Header)
+	err := handler.authenticate(r.Header)
 	if err != nil {
 		log.Error(err)
-		handler.Redirect(&w, r)
+		handler.redirect(&w, r)
 		return
 	}
 	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
-		handler.Redirect(&w, r)
+		handler.redirect(&w, r)
 		return
 	}
 	wsConn.EnableWriteCompression(true)
@@ -93,23 +93,23 @@ func (server *Server) handleWsReadServer(content []byte) {
 	switch prefix {
 	case 0: //delete
 		session = binary.BigEndian.Uint16(b[2:])
-		server.Delete(session)
+		server.delete(session)
 
 	case uint16(socks5.ATYPIPv4), uint16(socks5.ATYPDomain), uint16(socks5.ATYPIPv6):
 		session = binary.BigEndian.Uint16(b[2:4])
 		dstPort := strconv.Itoa(int(binary.BigEndian.Uint16(b[4:6])))
 		ipVer := b[1]
 		var dstAddr net.IP
-		wsw := server.GetWebsocketWriter(session)
+		wsw := server.getWebsocketWriter(session)
 		if prefix != uint16(socks5.ATYPDomain) {
 			dstAddr = b[6:]
 		} else {
 			var err error
-			dstAddr, ipVer, err = NsLookup(bytes.NewBuffer(b[7:]).String())
+			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String())
 			if err != nil {
 				log.Error(err)
 				reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
-				_, err = wsw.WriteReply(*reply)
+				_, err = wsw.writeReply(*reply)
 				if err != nil {
 					log.Error(err)
 				}
@@ -120,7 +120,7 @@ func (server *Server) handleWsReadServer(content []byte) {
 		if err != nil {
 			log.Error(err)
 			reply := socks5.NewReply(socks5.RepServerFailure, ipVer, net.IPv4zero, []byte{0, 0})
-			_, err = wsw.WriteReply(*reply)
+			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Error(err)
 			}
@@ -132,22 +132,22 @@ func (server *Server) handleWsReadServer(content []byte) {
 				return
 			}
 			reply := socks5.NewReply(socks5.RepSuccess, ipVer, addr, port)
-			_, err = wsw.WriteReply(*reply)
+			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Error(err)
 				return
 			}
 		}
-		server.connPool.Set(session, &conn)
-		go server.Peer.Forward(session)
+		server.connPool.set(session, &conn)
+		go server.peer.forward(session)
 
 	default:
 		session := prefix
-		server.Receive(session, b[2:])
+		server.receive(session, b[2:])
 	}
 }
 
-func (handler Handler) Authenticate(header http.Header) error {
+func (handler Handler) authenticate(header http.Header) error {
 	username := header.Get("username")
 	auth := header.Get("auth")
 	cipherText, err := hex.DecodeString(auth)
@@ -156,7 +156,7 @@ func (handler Handler) Authenticate(header http.Header) error {
 		return err
 	}
 	h := sha256.New()
-	h.Write([]byte(handler.GetPassword(username)))
+	h.Write([]byte(handler.getPassword(username)))
 	key := h.Sum(nil)
 	nonce, _ := hex.DecodeString("64a9433eae7ccceee2fc0eda")
 	block, err := aes.NewCipher(key)
@@ -182,12 +182,12 @@ func (handler Handler) Authenticate(header http.Header) error {
 	return nil
 }
 
-func (handler Handler) GetPassword(username string) string {
+func (handler Handler) getPassword(username string) string {
 	//TODO
 	return handler.Conf.Client.Password
 }
 
-func NsLookup(domain string) (net.IP, byte, error) {
+func nsLookup(domain string) (net.IP, byte, error) {
 	var dstAddr net.IP
 	dstAddr = nil
 
@@ -231,7 +231,7 @@ func NsLookup(domain string) (net.IP, byte, error) {
 	return dstAddr, 0, err
 }
 
-func (handler Handler) Redirect(w *http.ResponseWriter, r *http.Request) {
+func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
 	newReq, err := http.NewRequest(r.Method, "https://"+handler.Conf.Server.Pretend+r.RequestURI, r.Body)
 	if err != nil {
 		log.Error(err)

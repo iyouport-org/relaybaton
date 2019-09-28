@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-type Peer struct {
-	connPool     *ConnectionPool
+type peer struct {
+	connPool     *connectionPool
 	mutexWsRead  sync.Mutex
 	controlQueue chan *websocket.PreparedMessage
 	messageQueue chan *websocket.PreparedMessage
@@ -19,7 +19,7 @@ type Peer struct {
 	conf         Config
 }
 
-func (peer *Peer) Init(conf Config) {
+func (peer *peer) init(conf Config) {
 	peer.hasMessage = make(chan byte, 2^32+2^16)
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
@@ -28,9 +28,9 @@ func (peer *Peer) Init(conf Config) {
 	peer.conf = conf
 }
 
-func (peer *Peer) Forward(session uint16) {
-	wsw := peer.GetWebsocketWriter(session)
-	conn := peer.connPool.Get(session)
+func (peer *peer) forward(session uint16) {
+	wsw := peer.getWebsocketWriter(session)
+	conn := peer.connPool.get(session)
 	_, err := io.Copy(wsw, *conn)
 	if err != nil {
 		log.Error(err)
@@ -39,22 +39,22 @@ func (peer *Peer) Forward(session uint16) {
 	if err != nil {
 		log.WithField("session", session).Error(err)
 	}
-	_, err = wsw.WriteClose()
+	_, err = wsw.writeClose()
 	if err != nil {
 		log.WithField("session", session).Error(err)
 	}
-	peer.connPool.Delete(session)
+	peer.connPool.delete(session)
 }
 
-func (peer *Peer) Receive(session uint16, data []byte) {
-	wsw := peer.GetWebsocketWriter(session)
-	conn := peer.connPool.Get(session)
+func (peer *peer) receive(session uint16, data []byte) {
+	wsw := peer.getWebsocketWriter(session)
+	conn := peer.connPool.get(session)
 	if conn == nil {
-		if peer.connPool.CloseSent(session) {
+		if peer.connPool.isCloseSent(session) {
 			return
 		}
 		log.WithField("session", session).Debug("deleted connection read")
-		_, err := wsw.WriteClose()
+		_, err := wsw.writeClose()
 		if err != nil {
 			log.Error(err)
 		}
@@ -67,36 +67,36 @@ func (peer *Peer) Receive(session uint16, data []byte) {
 		if err != nil {
 			log.Error(err)
 		}
-		_, err = wsw.WriteClose()
+		_, err = wsw.writeClose()
 		if err != nil {
 			log.Error(err)
 		}
-		peer.connPool.Delete(session)
+		peer.connPool.delete(session)
 	}
 }
 
-func (peer *Peer) Delete(session uint16) {
-	conn := peer.connPool.Get(session)
+func (peer *peer) delete(session uint16) {
+	conn := peer.connPool.get(session)
 	if conn != nil {
 		err := (*conn).Close()
 		if err != nil {
 			log.Error(err)
 		}
-		peer.connPool.Delete(session)
+		peer.connPool.delete(session)
 
 		log.Debugf("Port %d Deleted", session)
 	}
-	peer.connPool.SentClose(session)
+	peer.connPool.setCloseSent(session)
 }
 
-func (peer *Peer) GetWebsocketWriter(session uint16) WebSocketWriter {
-	return WebSocketWriter{
+func (peer *peer) getWebsocketWriter(session uint16) webSocketWriter {
+	return webSocketWriter{
 		session: session,
 		peer:    peer,
 	}
 }
 
-func (peer *Peer) ProcessQueue() {
+func (peer *peer) processQueue() {
 	for {
 		select {
 		case <-peer.quit:
@@ -125,7 +125,7 @@ func (peer *Peer) ProcessQueue() {
 	}
 }
 
-func (peer *Peer) Close() {
+func (peer *peer) Close() {
 	log.Debug("closing peer")
 	peer.mutexWsRead.Unlock()
 	peer.quit <- 0
@@ -133,7 +133,7 @@ func (peer *Peer) Close() {
 	peer.quit <- 2
 }
 
-func Uint16ToBytes(n uint16) []byte {
+func uint16ToBytes(n uint16) []byte {
 	buf := make([]byte, 2)
 	binary.BigEndian.PutUint16(buf, n)
 	return buf

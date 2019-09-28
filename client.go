@@ -24,12 +24,12 @@ import (
 )
 
 type Client struct {
-	Peer
+	peer
 }
 
 func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
-	client.Init(conf)
+	client.init(conf)
 
 	u := url.URL{
 		Scheme: "wss",
@@ -37,7 +37,7 @@ func NewClient(conf Config) (*Client, error) {
 		Path:   "/",
 	}
 
-	esniKey, err := GetESNIKey(conf.Client.Server)
+	esniKey, err := getESNIKey(conf.Client.Server)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -50,7 +50,7 @@ func NewClient(conf Config) (*Client, error) {
 		EnableCompression: true,
 	}
 
-	header, err := BuildHeader(conf)
+	header, err := buildHeader(conf)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -77,8 +77,8 @@ func (client *Client) Run() {
 		log.Error(err)
 		return
 	}
-	go client.ListenSocks(sl)
-	go client.Peer.ProcessQueue()
+	go client.listenSocks(sl)
+	go client.peer.processQueue()
 
 	for {
 		select {
@@ -97,7 +97,7 @@ func (client *Client) Run() {
 	}
 }
 
-func (client *Client) ListenSocks(sl net.Listener) {
+func (client *Client) listenSocks(sl net.Listener) {
 	for {
 		select {
 		case <-client.quit:
@@ -110,8 +110,8 @@ func (client *Client) ListenSocks(sl net.Listener) {
 				return
 			}
 			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
-			wsw := client.GetWebsocketWriter(port)
-			err = ServeSocks5(&s5conn, &wsw)
+			wsw := client.getWebsocketWriter(port)
+			err = serveSocks5(&s5conn, &wsw)
 			if err != nil {
 				log.Error(err)
 				err = s5conn.Close()
@@ -120,8 +120,8 @@ func (client *Client) ListenSocks(sl net.Listener) {
 				}
 				continue
 			}
-			client.connPool.Set(port, &s5conn)
-			go client.Peer.Forward(port)
+			client.connPool.set(port, &s5conn)
+			go client.peer.forward(port)
 		}
 	}
 }
@@ -131,13 +131,13 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 	copy(b, content)
 	client.mutexWsRead.Unlock()
 	prefix := binary.BigEndian.Uint16(b[:2])
-	if client.connPool.CloseSent(prefix) {
+	if client.connPool.isCloseSent(prefix) {
 		return
 	}
 	switch prefix {
 	case 0: //delete
 		session := binary.BigEndian.Uint16(b[2:])
-		client.Delete(session)
+		client.delete(session)
 
 	case uint16(socks5.ATYPIPv4), uint16(socks5.ATYPDomain), uint16(socks5.ATYPIPv6):
 		atyp := b[1]
@@ -146,11 +146,11 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 		bndPort := b[5:7]
 		bndAddr := b[7:]
 		reply := socks5.NewReply(rep, atyp, bndAddr, bndPort)
-		wsw := client.GetWebsocketWriter(session)
-		conn := client.connPool.Get(session)
+		wsw := client.getWebsocketWriter(session)
+		conn := client.connPool.get(session)
 		if conn == nil {
 			log.WithField("session", session).Warnf("WebSocket deleted read") //test
-			_, err := wsw.WriteClose()
+			_, err := wsw.writeClose()
 			if err != nil {
 				log.Error(err)
 			}
@@ -163,23 +163,23 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 			if err != nil {
 				log.Error(err)
 			}
-			_, err = wsw.WriteClose()
+			_, err = wsw.writeClose()
 			if err != nil {
 				log.Error(err)
 			}
-			client.connPool.Delete(session)
+			client.connPool.delete(session)
 		}
 		if rep != socks5.RepSuccess {
-			err = (*client.connPool.Get(session)).Close()
+			err = (*client.connPool.get(session)).Close()
 			if err != nil {
 				log.Error(err)
 			}
-			client.connPool.Delete(session)
+			client.connPool.delete(session)
 		}
 
 	default:
 		session := prefix
-		client.Receive(session, b[2:])
+		client.receive(session, b[2:])
 	}
 }
 
@@ -205,12 +205,12 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 		log.Error(err)
 		return nil, err
 	}
-	atyp, addr, port, err := Resolve(address)
+	atyp, addr, port, err := resolve(address)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	request := socks5.NewRequest(socks5.CmdConnect, atyp, addr, Uint16ToBytes(port))
+	request := socks5.NewRequest(socks5.CmdConnect, atyp, addr, uint16ToBytes(port))
 	err = request.WriteTo(rawConn)
 	if err != nil {
 		log.Error(err)
@@ -229,7 +229,7 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 	return rawConn, nil
 }
 
-func Resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
+func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	addrTCP, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		log.Debug(err)
@@ -255,7 +255,7 @@ func Resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	}
 }
 
-func ServeSocks5(conn *net.Conn, wsw *WebSocketWriter) error {
+func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 	negotiationRequest, err := socks5.NewNegotiationRequestFrom(*conn)
 	if err != nil {
 		log.Error(err)
@@ -289,7 +289,7 @@ func ServeSocks5(conn *net.Conn, wsw *WebSocketWriter) error {
 		log.Error(err)
 		return err
 	}
-	_, err = wsw.WriteConnect(*request)
+	_, err = wsw.writeConnect(*request)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -297,7 +297,7 @@ func ServeSocks5(conn *net.Conn, wsw *WebSocketWriter) error {
 	return nil
 }
 
-func BuildHeader(conf Config) (http.Header, error) {
+func buildHeader(conf Config) (http.Header, error) {
 	header := http.Header{}
 	h := sha256.New()
 	h.Write([]byte(conf.Client.Password))
@@ -322,7 +322,7 @@ func BuildHeader(conf Config) (http.Header, error) {
 	return header, nil
 }
 
-func GetESNIKey(domain string) (*tls.ESNIKeys, error) {
+func getESNIKey(domain string) (*tls.ESNIKeys, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	c := doh.New(doh.CloudflareProvider)

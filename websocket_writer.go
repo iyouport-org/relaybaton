@@ -7,19 +7,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type WebSocketWriter struct {
+type webSocketWriter struct {
 	session uint16
-	peer    *Peer
+	peer    *peer
 }
 
-func (wsw WebSocketWriter) Write(p []byte) (n int, err error) {
-	conn := wsw.peer.connPool.Get(wsw.session)
+func (wsw webSocketWriter) Write(p []byte) (n int, err error) {
+	conn := wsw.peer.connPool.get(wsw.session)
 	if conn == nil {
-		err = errors.New("write deleted connection")
+		err = errors.New("Write deleted connection")
 		log.WithField("session", wsw.session).Error(err)
 		return 0, err
 	}
-	msg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, append(Uint16ToBytes(wsw.session), p...))
+	msg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, append(uint16ToBytes(wsw.session), p...))
 	if err != nil {
 		log.Error(err)
 	}
@@ -28,13 +28,13 @@ func (wsw WebSocketWriter) Write(p []byte) (n int, err error) {
 	return len(p), err
 }
 
-func (wsw WebSocketWriter) WriteClose() (n int, err error) {
-	if wsw.peer.connPool.CloseSent(wsw.session) {
+func (wsw webSocketWriter) writeClose() (n int, err error) {
+	if wsw.peer.connPool.isCloseSent(wsw.session) {
 		return 0, nil
 	} else {
-		wsw.peer.connPool.SentClose(wsw.session)
+		wsw.peer.connPool.setCloseSent(wsw.session)
 	}
-	msg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, append([]byte{0, 0}, Uint16ToBytes(wsw.session)...))
+	msg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, append([]byte{0, 0}, uint16ToBytes(wsw.session)...))
 	if err != nil {
 		log.Error(err)
 	}
@@ -43,10 +43,10 @@ func (wsw WebSocketWriter) WriteClose() (n int, err error) {
 	return 2, err
 }
 
-func (wsw WebSocketWriter) WriteConnect(request socks5.Request) (n int, err error) {
+func (wsw webSocketWriter) writeConnect(request socks5.Request) (n int, err error) {
 	// ATYP 2 SESSION 2 PORT 2 ADDR
 	msgBytes := []byte{0, request.Atyp}
-	msgBytes = append(msgBytes, Uint16ToBytes(wsw.session)...)
+	msgBytes = append(msgBytes, uint16ToBytes(wsw.session)...)
 	msgBytes = append(msgBytes, request.DstPort...)
 	msgBytes = append(msgBytes, request.DstAddr...)
 	msg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, msgBytes)
@@ -58,10 +58,10 @@ func (wsw WebSocketWriter) WriteConnect(request socks5.Request) (n int, err erro
 	return len(msgBytes), err
 }
 
-func (wsw WebSocketWriter) WriteReply(reply socks5.Reply) (n int, err error) {
+func (wsw webSocketWriter) writeReply(reply socks5.Reply) (n int, err error) {
 	// ATYP 2 SESSION 2 REP 1 PORT 2 ADDR
 	msgBytes := []byte{0, reply.Atyp}
-	msgBytes = append(msgBytes, Uint16ToBytes(wsw.session)...)
+	msgBytes = append(msgBytes, uint16ToBytes(wsw.session)...)
 	msgBytes = append(msgBytes, reply.Rep)
 	msgBytes = append(msgBytes, reply.BndPort...)
 	msgBytes = append(msgBytes, reply.BndAddr...)
