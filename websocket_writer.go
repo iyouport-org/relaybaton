@@ -32,9 +32,8 @@ func (wsw webSocketWriter) Write(p []byte) (n int, err error) {
 func (wsw webSocketWriter) writeClose() (n int, err error) {
 	if wsw.peer.connPool.isCloseSent(wsw.session) {
 		return 0, nil
-	} else {
-		wsw.peer.connPool.setCloseSent(wsw.session)
 	}
+	wsw.peer.connPool.setCloseSent(wsw.session)
 	msg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, append([]byte{0, 0}, uint16ToBytes(wsw.session)...))
 	if err != nil {
 		log.Error(err)

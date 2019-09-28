@@ -254,9 +254,8 @@ func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	}
 	if addrTCP.IP.To4() != nil {
 		return socks5.ATYPIPv4, []byte(addrTCP.IP.To4().String()), uint16(addrTCP.Port), nil
-	} else {
-		return socks5.ATYPIPv6, []byte(addrTCP.IP.To16().String()), uint16(addrTCP.Port), nil
 	}
+	return socks5.ATYPIPv6, []byte(addrTCP.IP.To16().String()), uint16(addrTCP.Port), nil
 }
 
 func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {

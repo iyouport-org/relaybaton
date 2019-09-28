@@ -98,19 +98,19 @@ func (server *Server) handleWsReadServer(content []byte) {
 				log.Error(err)
 			}
 			return
-		} else {
-			_, addr, port, err := socks5.ParseAddress(conn.LocalAddr().String())
-			if err != nil {
-				log.Error(err)
-				return
-			}
-			reply := socks5.NewReply(socks5.RepSuccess, ipVer, addr, port)
-			_, err = wsw.writeReply(*reply)
-			if err != nil {
-				log.Error(err)
-				return
-			}
 		}
+		_, addr, port, err := socks5.ParseAddress(conn.LocalAddr().String())
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		reply := socks5.NewReply(socks5.RepSuccess, ipVer, addr, port)
+		_, err = wsw.writeReply(*reply)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+
 		server.connPool.set(session, &conn)
 		go server.peer.forward(session)
 
