@@ -163,23 +163,26 @@ func (handler Handler) authenticate(header http.Header) error {
 	h := sha256.New()
 	h.Write([]byte(handler.getPassword(username)))
 	key := h.Sum(nil)
-	nonce, _ := hex.DecodeString("64a9433eae7ccceee2fc0eda")
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	aesGcm, err := cipher.NewGCM(block)
+	if len(cipherText) < aes.BlockSize {
+		err = errors.New("ciphertext too short")
+		log.Error(err)
+		return err
+	}
+	iv := cipherText[:aes.BlockSize]
+	cipherText = cipherText[aes.BlockSize:]
+	stream := cipher.NewCFBDecrypter(block, iv)
+	stream.XORKeyStream(cipherText, cipherText)
+	plaintext, err := strconv.ParseInt(string(cipherText), 2, 64)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	plaintext, err := aesGcm.Open(nil, nonce, cipherText, nil)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	if time.Since(time.Unix(int64(binary.BigEndian.Uint64(plaintext)), 0)).Seconds() > 60 {
+	if time.Since(time.Unix(plaintext, 0)).Seconds() > 60 {
 		err = errors.New("authentication fail")
 		log.Error(err)
 		return err

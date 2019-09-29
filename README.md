@@ -1,6 +1,7 @@
 # relaybaton
 A pluggable transport to circumvent Internet censorship
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GoDoc](https://godoc.org/github.com/iyouport-org/relaybaton?status.svg)](https://godoc.org/github.com/iyouport-org/relaybaton)
 [![Go Report Card](https://goreportcard.com/badge/github.com/iyouport-org/relaybaton)](https://goreportcard.com/report/github.com/iyouport-org/relaybaton)
 
@@ -86,13 +87,13 @@ We use [SemVer](http://semver.org/) for versioning. For the versions available, 
 
 ## Authors
 
-* **[onoketa]((https://github.com/onoketa))**
+- [onoketa]((https://github.com/onoketa))
 
 See also the list of [contributors](https://github.com/iyouport-org/relaybaton/contributors) who participated in this project.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE.md) file for details
 
 ## Acknowledgments
 
