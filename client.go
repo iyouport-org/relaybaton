@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
@@ -16,6 +17,7 @@ import (
 	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -305,21 +307,21 @@ func buildHeader(conf Config) (http.Header, error) {
 	h := sha256.New()
 	h.Write([]byte(conf.Client.Password))
 	key := h.Sum(nil)
-	var plaintext = make([]byte, 8)
-	binary.BigEndian.PutUint64(plaintext, uint64(time.Now().Unix()))
+	plaintext := []byte(strconv.FormatInt(time.Now().Unix(), 2))
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	nonce, _ := hex.DecodeString("64a9433eae7ccceee2fc0eda")
-	aesGcm, err := cipher.NewGCM(block)
-	if err != nil {
-		log.Error(err)
-		return nil, err
+	cipherText := make([]byte, aes.BlockSize+len(plaintext))
+	iv := cipherText[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		panic(err)
 	}
-	cipherText := aesGcm.Seal(nil, nonce, plaintext, nil)
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(cipherText[aes.BlockSize:], plaintext)
+
 	header.Add("username", conf.Client.Username)
 	header.Add("auth", hex.EncodeToString(cipherText))
 	return header, nil
