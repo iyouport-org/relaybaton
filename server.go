@@ -42,14 +42,17 @@ func (server *Server) Run() {
 
 	for {
 		select {
-		case <-server.quit:
+		case <-server.close:
 			return
 		default:
 			server.mutexWsRead.Lock()
 			_, content, err := server.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				server.Close()
+				err = server.Close()
+				if err != nil {
+					log.Error(err)
+				}
 				return
 			}
 			go server.handleWsReadServer(content)

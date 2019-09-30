@@ -14,7 +14,7 @@ type peer struct {
 	controlQueue chan *websocket.PreparedMessage
 	messageQueue chan *websocket.PreparedMessage
 	hasMessage   chan byte
-	quit         chan byte
+	close        chan byte
 	wsConn       *websocket.Conn
 	conf         Config
 }
@@ -24,7 +24,7 @@ func (peer *peer) init(conf Config) {
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
 	peer.connPool = newConnectionPool()
-	peer.quit = make(chan byte, 3)
+	peer.close = make(chan byte, 10)
 	peer.conf = conf
 }
 
@@ -99,7 +99,7 @@ func (peer *peer) getWebsocketWriter(session uint16) webSocketWriter {
 func (peer *peer) processQueue() {
 	for {
 		select {
-		case <-peer.quit:
+		case <-peer.close:
 			return
 		default:
 			<-peer.hasMessage
@@ -110,14 +110,20 @@ func (peer *peer) processQueue() {
 				err := peer.wsConn.WritePreparedMessage(<-peer.controlQueue)
 				if err != nil {
 					log.Error(err)
-					peer.Close()
+					err = peer.Close()
+					if err != nil {
+						log.Debug(err)
+					}
 					return
 				}
 			} else {
 				err := peer.wsConn.WritePreparedMessage(<-peer.messageQueue)
 				if err != nil {
 					log.Error(err)
-					peer.Close()
+					err = peer.Close()
+					if err != nil {
+						log.Debug(err)
+					}
 					return
 				}
 			}
@@ -125,12 +131,17 @@ func (peer *peer) processQueue() {
 	}
 }
 
-func (peer *peer) Close() {
+func (peer *peer) Close() error {
 	log.Debug("closing peer")
+	err := peer.wsConn.Close()
+	if err != nil {
+		log.Debug(err)
+	}
 	peer.mutexWsRead.Unlock()
-	peer.quit <- 0
-	peer.quit <- 1
-	peer.quit <- 2
+	peer.close <- 0
+	peer.close <- 1
+	peer.close <- 2
+	return err
 }
 
 func uint16ToBytes(n uint16) []byte {

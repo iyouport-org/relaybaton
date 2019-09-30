@@ -87,14 +87,17 @@ func (client *Client) Run() {
 
 	for {
 		select {
-		case <-client.quit:
+		case <-client.close:
 			return
 		default:
 			client.mutexWsRead.Lock()
 			_, content, err := client.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				client.Close()
+				err = client.Close()
+				if err != nil {
+					log.Error(err)
+				}
 				return
 			}
 			go client.handleWsReadClient(content, client.wsConn)
@@ -152,13 +155,16 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 func (client *Client) listenSocks(sl net.Listener) {
 	for {
 		select {
-		case <-client.quit:
+		case <-client.close:
 			return
 		default:
 			s5conn, err := sl.Accept()
 			if err != nil {
 				log.Error(err)
-				client.Close()
+				err = client.Close()
+				if err != nil {
+					log.Error(err)
+				}
 				return
 			}
 			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
