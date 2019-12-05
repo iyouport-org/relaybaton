@@ -34,7 +34,11 @@ type Client struct {
 func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
 	client.init(conf)
-
+	dstAddr, _, err := nsLookup(conf.Client.Server, 4)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
 	u := url.URL{
 		Scheme: "wss",
 		Host:   conf.Client.Server + ":443",
@@ -48,8 +52,12 @@ func NewClient(conf Config) (*Client, error) {
 	}
 
 	dialer := websocket.Dialer{
+		NetDial: func(network, addr string) (net.Conn, error) {
+			return net.Dial("tcp", dstAddr.String()+":443")
+		},
 		TLSClientConfig: &tls.Config{
 			ClientESNIKeys: esniKey,
+			ServerName:     conf.Client.Server,
 		},
 		EnableCompression: true,
 	}
@@ -60,7 +68,7 @@ func NewClient(conf Config) (*Client, error) {
 		return nil, err
 	}
 
-	client.wsConn, _, err = dialer.Dial(u.String(), header)
+	client.wsConn, _, err = dialer.Dial(u.String(), header) //Add ESNI support later
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -334,7 +342,7 @@ func buildHeader(conf Config) (http.Header, error) {
 }
 
 func getESNIKey(domain string) (*tls.ESNIKeys, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	c := doh.New(doh.CloudflareProvider)
 	rsp, err := c.Query(ctx, dns.Domain("_esni."+domain), dns.TypeTXT)

@@ -1,11 +1,18 @@
 package relaybaton
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"github.com/gorilla/websocket"
+	"github.com/iyouport-org/doh-go"
+	"github.com/iyouport-org/doh-go/dns"
+	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"net"
 	"sync"
+	"time"
 )
 
 type peer struct {
@@ -137,7 +144,6 @@ func (peer *peer) Close() error {
 	if err != nil {
 		log.Debug(err)
 	}
-	peer.mutexWsRead.Unlock()
 	peer.close <- 0
 	peer.close <- 1
 	peer.close <- 2
@@ -148,4 +154,50 @@ func uint16ToBytes(n uint16) []byte {
 	buf := make([]byte, 2)
 	binary.BigEndian.PutUint16(buf, n)
 	return buf
+}
+
+func nsLookup(domain string, ipv byte) (net.IP, byte, error) {
+	var dstAddr net.IP
+	dstAddr = nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c := doh.New(doh.CloudflareProvider)
+
+	if ipv == 6 {
+		//IPv6
+		rsp, err := c.Query(ctx, dns.Domain(domain), dns.TypeAAAA)
+		if err != nil {
+			log.Error(err)
+			return nil, 0, err
+		}
+		answer := rsp.Answer
+		for _, v := range answer {
+			if v.Type == 28 {
+				dstAddr = net.ParseIP(v.Data).To16()
+			}
+		}
+		if dstAddr != nil {
+			return dstAddr, socks5.ATYPIPv6, nil
+		}
+	}
+
+	//IPv4
+	rsp, err := c.Query(ctx, dns.Domain(domain), dns.TypeA)
+	if err != nil {
+		log.Error(err)
+		return nil, 0, err
+	}
+	answer := rsp.Answer
+	for _, v := range answer {
+		if v.Type == 1 {
+			dstAddr = net.ParseIP(v.Data).To4()
+		}
+	}
+	if dstAddr != nil {
+		return dstAddr, socks5.ATYPIPv4, nil
+	}
+
+	err = errors.New("DNS error")
+	return dstAddr, 0, err
 }

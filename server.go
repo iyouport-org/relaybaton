@@ -3,7 +3,6 @@ package relaybaton
 import (
 	"bytes"
 	"compress/flate"
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
@@ -11,8 +10,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gorilla/websocket"
-	"github.com/iyouport-org/doh-go"
-	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
@@ -81,7 +78,7 @@ func (server *Server) handleWsReadServer(content []byte) {
 			dstAddr = b[6:]
 		} else {
 			var err error
-			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String())
+			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String(), 6)
 			if err != nil {
 				log.Error(err)
 				reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
@@ -230,48 +227,4 @@ func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 		return
 	}
-}
-
-func nsLookup(domain string) (net.IP, byte, error) {
-	var dstAddr net.IP
-	dstAddr = nil
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	c := doh.New(doh.CloudflareProvider)
-
-	//IPv6
-	rsp, err := c.Query(ctx, dns.Domain(domain), dns.TypeAAAA)
-	if err != nil {
-		log.Error(err)
-		return nil, 0, err
-	}
-	answer := rsp.Answer
-	for _, v := range answer {
-		if v.Type == 28 {
-			dstAddr = net.ParseIP(v.Data).To16()
-		}
-	}
-	if dstAddr != nil {
-		return dstAddr, socks5.ATYPIPv6, nil
-	}
-
-	//IPv4
-	rsp, err = c.Query(ctx, dns.Domain(domain), dns.TypeA)
-	if err != nil {
-		log.Error(err)
-		return nil, 0, err
-	}
-	answer = rsp.Answer
-	for _, v := range answer {
-		if v.Type == 1 {
-			dstAddr = net.ParseIP(v.Data).To4()
-		}
-	}
-	if dstAddr != nil {
-		return dstAddr, socks5.ATYPIPv4, nil
-	}
-
-	err = errors.New("DNS error")
-	return dstAddr, 0, err
 }
