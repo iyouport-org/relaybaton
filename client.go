@@ -6,7 +6,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
@@ -17,6 +16,7 @@ import (
 	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/scrypt"
 	"io"
 	"net"
 	"net/http"
@@ -318,26 +318,38 @@ func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 
 func buildHeader(conf Config) (http.Header, error) {
 	header := http.Header{}
-	h := sha256.New()
-	h.Write([]byte(conf.Client.Password))
-	key := h.Sum(nil)
-	plaintext := []byte(strconv.FormatInt(time.Now().Unix(), 2))
+	nonce := make([]byte, 12)
+	_, err := io.ReadFull(rand.Reader, nonce)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	key, err := scrypt.Key([]byte(conf.Client.Password), nonce, 32768, 8, 1, 32)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	var plaintext = make([]byte, 8)
+	binary.BigEndian.PutUint64(plaintext, uint64(time.Now().UnixNano()))
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	cipherText := make([]byte, aes.BlockSize+len(plaintext))
-	iv := cipherText[:aes.BlockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		panic(err)
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Error(err)
+		return nil, err
 	}
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(cipherText[aes.BlockSize:], plaintext)
+
+	cipherText := aesgcm.Seal(nonce, nonce, plaintext, nil)
 
 	header.Add("username", conf.Client.Username)
-	header.Add("auth", hex.EncodeToString(cipherText))
+	header.Add("token", hex.EncodeToString(cipherText))
 	return header, nil
 }
 

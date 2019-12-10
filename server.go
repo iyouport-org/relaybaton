@@ -5,13 +5,13 @@ import (
 	"compress/flate"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/scrypt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -154,35 +154,40 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (handler Handler) authenticate(header http.Header) error {
 	username := header.Get("username")
-	auth := header.Get("auth")
-	cipherText, err := hex.DecodeString(auth)
+	token := header.Get("token")
+	data, err := hex.DecodeString(token)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	h := sha256.New()
-	h.Write([]byte(handler.getPassword(username)))
-	key := h.Sum(nil)
+	nonce, cipherText := data[:12], data[12:]
+
+	key, err := scrypt.Key([]byte(handler.getPassword(username)), nonce, 32768, 8, 1, 32)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	if len(cipherText) < aes.BlockSize {
-		err = errors.New("ciphertext too short")
-		log.Error(err)
-		return err
-	}
-	iv := cipherText[:aes.BlockSize]
-	cipherText = cipherText[aes.BlockSize:]
-	stream := cipher.NewCFBDecrypter(block, iv)
-	stream.XORKeyStream(cipherText, cipherText)
-	plaintext, err := strconv.ParseInt(string(cipherText), 2, 64)
+
+	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	if time.Since(time.Unix(plaintext, 0)).Seconds() > 60 {
+
+	plaintext, err := aesgcm.Open(nil, nonce, cipherText, nil)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	t := int64(binary.BigEndian.Uint64(plaintext))
+	if time.Since(time.Unix(t/1000000000, t%1000000000)).Seconds() > 60 {
 		err = errors.New("authentication fail")
 		log.Error(err)
 		return err
