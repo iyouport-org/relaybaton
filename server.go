@@ -73,21 +73,26 @@ func (server *Server) handleWsReadServer(content []byte) {
 		dstPort := strconv.Itoa(int(binary.BigEndian.Uint16(b[4:6])))
 		ipVer := b[1]
 		var dstAddr net.IP
+		var err error
+		dohProvider := getDoHProvider(server.conf.Server.DoH)
 		wsw := server.getWebsocketWriter(session)
 		if prefix != uint16(socks5.ATYPDomain) {
 			dstAddr = b[6:]
+		} else if dohProvider != -1 {
+			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String(), 6, dohProvider)
 		} else {
-			var err error
-			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String(), 6)
+			var dstAddrs []net.IP
+			dstAddrs, err = net.LookupIP(bytes.NewBuffer(b[7:]).String())
+			dstAddr = dstAddrs[0]
+		}
+		if err != nil {
+			log.Error(err)
+			reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
+			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Error(err)
-				reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
-				_, err = wsw.writeReply(*reply)
-				if err != nil {
-					log.Error(err)
-				}
-				return
 			}
+			return
 		}
 		conn, err := net.Dial("tcp", net.JoinHostPort(dstAddr.String(), dstPort))
 		if err != nil {
@@ -160,7 +165,17 @@ func (handler Handler) authenticate(header http.Header) error {
 		log.Error(err)
 		return err
 	}
+	if len(data) < 12 {
+		err = errors.New("authentication failed: data too short")
+		log.Error(err)
+		return err
+	}
 	nonce, cipherText := data[:12], data[12:]
+	if handler.nonceUsed(username, nonce) {
+		err = errors.New("authentication failed in nonce verification")
+		log.Error(err)
+		return err
+	}
 
 	key, err := scrypt.Key([]byte(handler.getPassword(username)), nonce, 32768, 8, 1, 32)
 	if err != nil {
@@ -188,16 +203,33 @@ func (handler Handler) authenticate(header http.Header) error {
 
 	t := int64(binary.BigEndian.Uint64(plaintext))
 	if time.Since(time.Unix(t/1000000000, t%1000000000)).Seconds() > 60 {
-		err = errors.New("authentication fail")
+		err = errors.New("authentication failed in time verification")
 		log.Error(err)
 		return err
 	}
+
+	err = handler.saveNonce(username, nonce)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
 	return nil
 }
 
 func (handler Handler) getPassword(username string) string {
 	//TODO
 	return handler.Conf.Client.Password
+}
+
+func (hander Handler) nonceUsed(username string, nonce []byte) bool {
+	//TODO
+	return false
+}
+
+func (hander Handler) saveNonce(username string, nonce []byte) error {
+	//TODO
+	return nil
 }
 
 func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {

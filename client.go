@@ -34,7 +34,13 @@ type Client struct {
 func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
 	client.init(conf)
-	dstAddr, _, err := nsLookup(conf.Client.Server, 4)
+	dohProvider := getDoHProvider(conf.Client.DoH)
+	if dohProvider == -1 {
+		err := errors.New("unknown doh provider")
+		log.Error(err)
+		return nil, err
+	}
+	dstAddr, _, err := nsLookup(conf.Client.Server, 4, dohProvider)
 	if err != nil {
 		log.Error(err)
 		return nil, err

@@ -156,13 +156,13 @@ func uint16ToBytes(n uint16) []byte {
 	return buf
 }
 
-func nsLookup(domain string, ipv byte) (net.IP, byte, error) {
+func nsLookup(domain string, ipv byte, provider int) (net.IP, byte, error) {
 	var dstAddr net.IP
 	dstAddr = nil
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	c := doh.New(doh.CloudflareProvider)
+	c := doh.New(provider)
 
 	if ipv == 6 {
 		//IPv6

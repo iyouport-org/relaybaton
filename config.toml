@@ -5,7 +5,9 @@ server="example.com"
 port=1081
 username="username"
 password="password"
+doh="cloudflare"    #cloudflare, quad9
 
 [server]
 port=80
 pretend="www.kernel.org"
+doh="null"    #null, cloudflare, quad9
