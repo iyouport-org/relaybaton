@@ -16,7 +16,7 @@ import (
 	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/scrypt"
+	"golang.org/x/crypto/argon2"
 	"io"
 	"net"
 	"net/http"
@@ -330,13 +330,7 @@ func buildHeader(conf Config) (http.Header, error) {
 		log.Error(err)
 		return nil, err
 	}
-
-	key, err := scrypt.Key([]byte(conf.Client.Password), nonce, 32768, 8, 1, 32)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
+	key := argon2.Key([]byte(conf.Client.Password), nonce, 3, 32*1024, 4, 32)
 	var plaintext = make([]byte, 8)
 	binary.BigEndian.PutUint64(plaintext, uint64(time.Now().UnixNano()))
 

@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/scrypt"
+	"golang.org/x/crypto/argon2"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -177,12 +177,7 @@ func (handler Handler) authenticate(header http.Header) error {
 		return err
 	}
 
-	key, err := scrypt.Key([]byte(handler.getPassword(username)), nonce, 32768, 8, 1, 32)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
+	key := argon2.Key([]byte(handler.getPassword(username)), nonce, 3, 32*1024, 4, 32)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
