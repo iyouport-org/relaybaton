@@ -10,6 +10,11 @@ import (
 	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/socks5"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mssql"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
 	"io/ioutil"
@@ -29,7 +34,6 @@ func NewServer(conf Config, wsConn *websocket.Conn) *Server {
 	server := &Server{}
 	server.init(conf)
 	server.wsConn = wsConn
-
 	return server
 }
 
@@ -128,14 +132,24 @@ func (server *Server) handleWsReadServer(content []byte) {
 // Handler pass config to ServeHTTP()
 type Handler struct {
 	Conf Config
+	db   *gorm.DB
 }
 
 // ServerHTTP accept incoming HTTP request, establish websocket connections, and a new server for handling the connection. If authentication failed, the request will be redirected to the website set in the configuration file.
 func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 	}
-	err := handler.authenticate(r.Header)
+
+	handler.db, err = handler.Conf.DB.getDB()
+	if err != nil {
+		log.Error(err)
+		handler.redirect(&w, r)
+		return
+	}
+
+	err = handler.authenticate(r.Header)
 	if err != nil {
 		log.Error(err)
 		handler.redirect(&w, r)
@@ -171,13 +185,23 @@ func (handler Handler) authenticate(header http.Header) error {
 		return err
 	}
 	nonce, cipherText := data[:12], data[12:]
-	if handler.nonceUsed(username, nonce) {
+	nonceUsed, err := handler.nonceUsed(username, nonce)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	if nonceUsed {
 		err = errors.New("authentication failed in nonce verification")
 		log.Error(err)
 		return err
 	}
 
-	key := argon2.Key([]byte(handler.getPassword(username)), nonce, 3, 32*1024, 4, 32)
+	password, err := handler.getPassword(username)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	key := argon2.Key([]byte(password), nonce, 3, 32*1024, 4, 32)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
@@ -212,18 +236,43 @@ func (handler Handler) authenticate(header http.Header) error {
 	return nil
 }
 
-func (handler Handler) getPassword(username string) string {
-	//TODO
-	return handler.Conf.Client.Password
+func (handler Handler) getPassword(username string) (string, error) {
+	db := handler.db
+	db.AutoMigrate(&User{})
+	var user User
+	err := db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return "", err
+	}
+	return user.Password, nil
 }
 
-func (hander Handler) nonceUsed(username string, nonce []byte) bool {
-	//TODO
-	return false
+func (handler Handler) nonceUsed(username string, nonce []byte) (bool, error) {
+	db := handler.db
+	db.AutoMigrate(&NonceRecord{})
+	var nonceRecord NonceRecord
+	db = db.Where(&NonceRecord{Username: username, Nonce: nonce}).First(&nonceRecord)
+	if db.RecordNotFound() {
+		return false, nil
+	}
+	err := db.Error
+	if err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
-func (hander Handler) saveNonce(username string, nonce []byte) error {
-	//TODO
+func (handler Handler) saveNonce(username string, nonce []byte) error {
+	db := handler.db
+	db.AutoMigrate(&NonceRecord{})
+	newNonce := &NonceRecord{
+		Username: username,
+		Nonce:    nonce,
+	}
+	err := db.Create(newNonce).Error
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

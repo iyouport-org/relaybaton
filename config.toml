@@ -11,3 +11,11 @@ doh="cloudflare"    #cloudflare, quad9
 port=80
 pretend="www.kernel.org"
 doh="null"    #null, cloudflare, quad9
+
+[db]
+type="sqlite3" #sqlite3, mysql, postgresql, sqlserver
+username="root"
+password="password"
+host="localhost"
+port=1433
+database="relaybaton.db"
