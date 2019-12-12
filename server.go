@@ -3,18 +3,20 @@ package relaybaton
 import (
 	"bytes"
 	"compress/flate"
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"github.com/gorilla/websocket"
-	"github.com/iyouport-org/doh-go"
-	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/mssql"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
+	_ "github.com/jinzhu/gorm/dialects/postgres"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/argon2"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -32,7 +34,6 @@ func NewServer(conf Config, wsConn *websocket.Conn) *Server {
 	server := &Server{}
 	server.init(conf)
 	server.wsConn = wsConn
-
 	return server
 }
 
@@ -42,14 +43,17 @@ func (server *Server) Run() {
 
 	for {
 		select {
-		case <-server.quit:
+		case <-server.close:
 			return
 		default:
 			server.mutexWsRead.Lock()
 			_, content, err := server.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				server.Close()
+				err = server.Close()
+				if err != nil {
+					log.Error(err)
+				}
 				return
 			}
 			go server.handleWsReadServer(content)
@@ -73,21 +77,26 @@ func (server *Server) handleWsReadServer(content []byte) {
 		dstPort := strconv.Itoa(int(binary.BigEndian.Uint16(b[4:6])))
 		ipVer := b[1]
 		var dstAddr net.IP
+		var err error
+		dohProvider := getDoHProvider(server.conf.Server.DoH)
 		wsw := server.getWebsocketWriter(session)
 		if prefix != uint16(socks5.ATYPDomain) {
 			dstAddr = b[6:]
+		} else if dohProvider != -1 {
+			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String(), 6, dohProvider)
 		} else {
-			var err error
-			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String())
+			var dstAddrs []net.IP
+			dstAddrs, err = net.LookupIP(bytes.NewBuffer(b[7:]).String())
+			dstAddr = dstAddrs[0]
+		}
+		if err != nil {
+			log.Error(err)
+			reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
+			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Error(err)
-				reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
-				_, err = wsw.writeReply(*reply)
-				if err != nil {
-					log.Error(err)
-				}
-				return
 			}
+			return
 		}
 		conn, err := net.Dial("tcp", net.JoinHostPort(dstAddr.String(), dstPort))
 		if err != nil {
@@ -123,14 +132,24 @@ func (server *Server) handleWsReadServer(content []byte) {
 // Handler pass config to ServeHTTP()
 type Handler struct {
 	Conf Config
+	db   *gorm.DB
 }
 
 // ServerHTTP accept incoming HTTP request, establish websocket connections, and a new server for handling the connection. If authentication failed, the request will be redirected to the website set in the configuration file.
 func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 	}
-	err := handler.authenticate(r.Header)
+
+	handler.db, err = handler.Conf.DB.getDB()
+	if err != nil {
+		log.Error(err)
+		handler.redirect(&w, r)
+		return
+	}
+
+	err = handler.authenticate(r.Header)
 	if err != nil {
 		log.Error(err)
 		handler.redirect(&w, r)
@@ -154,45 +173,107 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (handler Handler) authenticate(header http.Header) error {
 	username := header.Get("username")
-	auth := header.Get("auth")
-	cipherText, err := hex.DecodeString(auth)
+	token := header.Get("token")
+	data, err := hex.DecodeString(token)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	h := sha256.New()
-	h.Write([]byte(handler.getPassword(username)))
-	key := h.Sum(nil)
+	if len(data) < 12 {
+		err = errors.New("authentication failed: data too short")
+		log.Error(err)
+		return err
+	}
+	nonce, cipherText := data[:12], data[12:]
+	nonceUsed, err := handler.nonceUsed(username, nonce)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	if nonceUsed {
+		err = errors.New("authentication failed in nonce verification")
+		log.Error(err)
+		return err
+	}
+
+	password, err := handler.getPassword(username)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	key := argon2.Key([]byte(password), nonce, 3, 32*1024, 4, 32)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	if len(cipherText) < aes.BlockSize {
-		err = errors.New("ciphertext too short")
-		log.Error(err)
-		return err
-	}
-	iv := cipherText[:aes.BlockSize]
-	cipherText = cipherText[aes.BlockSize:]
-	stream := cipher.NewCFBDecrypter(block, iv)
-	stream.XORKeyStream(cipherText, cipherText)
-	plaintext, err := strconv.ParseInt(string(cipherText), 2, 64)
+
+	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	if time.Since(time.Unix(plaintext, 0)).Seconds() > 60 {
-		err = errors.New("authentication fail")
+
+	plaintext, err := aesgcm.Open(nil, nonce, cipherText, nil)
+	if err != nil {
 		log.Error(err)
 		return err
 	}
+
+	t := int64(binary.BigEndian.Uint64(plaintext))
+	if time.Since(time.Unix(t/1000000000, t%1000000000)).Seconds() > 60 {
+		err = errors.New("authentication failed in time verification")
+		log.Error(err)
+		return err
+	}
+
+	err = handler.saveNonce(username, nonce)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
 	return nil
 }
 
-func (handler Handler) getPassword(username string) string {
-	//TODO
-	return handler.Conf.Client.Password
+func (handler Handler) getPassword(username string) (string, error) {
+	db := handler.db
+	db.AutoMigrate(&User{})
+	var user User
+	err := db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return "", err
+	}
+	return user.Password, nil
+}
+
+func (handler Handler) nonceUsed(username string, nonce []byte) (bool, error) {
+	db := handler.db
+	db.AutoMigrate(&NonceRecord{})
+	var nonceRecord NonceRecord
+	db = db.Where(&NonceRecord{Username: username, Nonce: nonce}).First(&nonceRecord)
+	if db.RecordNotFound() {
+		return false, nil
+	}
+	err := db.Error
+	if err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func (handler Handler) saveNonce(username string, nonce []byte) error {
+	db := handler.db
+	db.AutoMigrate(&NonceRecord{})
+	newNonce := &NonceRecord{
+		Username: username,
+		Nonce:    nonce,
+	}
+	err := db.Create(newNonce).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
@@ -227,48 +308,4 @@ func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 		return
 	}
-}
-
-func nsLookup(domain string) (net.IP, byte, error) {
-	var dstAddr net.IP
-	dstAddr = nil
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	c := doh.New(doh.CloudflareProvider)
-
-	//IPv6
-	rsp, err := c.Query(ctx, dns.Domain(domain), dns.TypeAAAA)
-	if err != nil {
-		log.Error(err)
-		return nil, 0, err
-	}
-	answer := rsp.Answer
-	for _, v := range answer {
-		if v.Type == 28 {
-			dstAddr = net.ParseIP(v.Data).To16()
-		}
-	}
-	if dstAddr != nil {
-		return dstAddr, socks5.ATYPIPv6, nil
-	}
-
-	//IPv4
-	rsp, err = c.Query(ctx, dns.Domain(domain), dns.TypeA)
-	if err != nil {
-		log.Error(err)
-		return nil, 0, err
-	}
-	answer = rsp.Answer
-	for _, v := range answer {
-		if v.Type == 1 {
-			dstAddr = net.ParseIP(v.Data).To4()
-		}
-	}
-	if dstAddr != nil {
-		return dstAddr, socks5.ATYPIPv4, nil
-	}
-
-	err = errors.New("DNS error")
-	return dstAddr, 0, err
 }

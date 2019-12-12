@@ -6,7 +6,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
@@ -17,6 +16,7 @@ import (
 	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/argon2"
 	"io"
 	"net"
 	"net/http"
@@ -34,7 +34,17 @@ type Client struct {
 func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
 	client.init(conf)
-
+	dohProvider := getDoHProvider(conf.Client.DoH)
+	if dohProvider == -1 {
+		err := errors.New("unknown doh provider")
+		log.Error(err)
+		return nil, err
+	}
+	dstAddr, _, err := nsLookup(conf.Client.Server, 4, dohProvider)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
 	u := url.URL{
 		Scheme: "wss",
 		Host:   conf.Client.Server + ":443",
@@ -48,8 +58,12 @@ func NewClient(conf Config) (*Client, error) {
 	}
 
 	dialer := websocket.Dialer{
+		NetDial: func(network, addr string) (net.Conn, error) {
+			return net.Dial("tcp", dstAddr.String()+":443")
+		},
 		TLSClientConfig: &tls.Config{
 			ClientESNIKeys: esniKey,
+			ServerName:     conf.Client.Server,
 		},
 		EnableCompression: true,
 	}
@@ -60,7 +74,7 @@ func NewClient(conf Config) (*Client, error) {
 		return nil, err
 	}
 
-	client.wsConn, _, err = dialer.Dial(u.String(), header)
+	client.wsConn, _, err = dialer.Dial(u.String(), header) //Add ESNI support later
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -87,14 +101,17 @@ func (client *Client) Run() {
 
 	for {
 		select {
-		case <-client.quit:
+		case <-client.close:
 			return
 		default:
 			client.mutexWsRead.Lock()
 			_, content, err := client.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				client.Close()
+				err = client.Close()
+				if err != nil {
+					log.Error(err)
+				}
 				return
 			}
 			go client.handleWsReadClient(content, client.wsConn)
@@ -152,13 +169,16 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 func (client *Client) listenSocks(sl net.Listener) {
 	for {
 		select {
-		case <-client.quit:
+		case <-client.close:
 			return
 		default:
 			s5conn, err := sl.Accept()
 			if err != nil {
 				log.Error(err)
-				client.Close()
+				err = client.Close()
+				if err != nil {
+					log.Error(err)
+				}
 				return
 			}
 			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
@@ -304,31 +324,37 @@ func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 
 func buildHeader(conf Config) (http.Header, error) {
 	header := http.Header{}
-	h := sha256.New()
-	h.Write([]byte(conf.Client.Password))
-	key := h.Sum(nil)
-	plaintext := []byte(strconv.FormatInt(time.Now().Unix(), 2))
+	nonce := make([]byte, 12)
+	_, err := io.ReadFull(rand.Reader, nonce)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	key := argon2.Key([]byte(conf.Client.Password), nonce, 3, 32*1024, 4, 32)
+	var plaintext = make([]byte, 8)
+	binary.BigEndian.PutUint64(plaintext, uint64(time.Now().UnixNano()))
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	cipherText := make([]byte, aes.BlockSize+len(plaintext))
-	iv := cipherText[:aes.BlockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		panic(err)
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		log.Error(err)
+		return nil, err
 	}
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(cipherText[aes.BlockSize:], plaintext)
+
+	cipherText := aesgcm.Seal(nonce, nonce, plaintext, nil)
 
 	header.Add("username", conf.Client.Username)
-	header.Add("auth", hex.EncodeToString(cipherText))
+	header.Add("token", hex.EncodeToString(cipherText))
 	return header, nil
 }
 
 func getESNIKey(domain string) (*tls.ESNIKeys, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	c := doh.New(doh.CloudflareProvider)
 	rsp, err := c.Query(ctx, dns.Domain("_esni."+domain), dns.TypeTXT)
