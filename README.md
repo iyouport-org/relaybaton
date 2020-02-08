@@ -45,23 +45,41 @@ server="example.com"
 port=1081
 username="username"
 password="password"
+doh="cloudflare"    #cloudflare, quad9
 
 [server]
 port=80
 pretend="www.kernel.org"
+doh="null"    #null, cloudflare, quad9
+
+[db]
+type="sqlite3" #sqlite3, mysql, postgresql, sqlserver
+username="root"
+password="password"
+host="localhost"
+port=1433
+database="relaybaton.db"
 ```
 
 #### Explanation of the fields
 
-|      Field      	| TOML Type 	|     Type    	|                          Explanation                         	|
-|:---------------:	|:---------:	|:-----------:	|:------------------------------------------------------------:	|
-|     log_file    	|   String  	|   filename  	| the filename of log file                                     	|
-|  client.server  	|   String  	| domain name 	| the domain name of the server                                	|
-|   client.port   	|  Integer  	|   TCP port  	| the local proxy port client listen to                        	|
-| client.username 	|   String  	|    string   	| the client username, for user authentication                 	|
-| client.password 	|   String  	|    string   	| the client password, for user authentication                 	|
-|   server.port   	|  Integer  	|   TCP port  	| the port server listen to (normally 80)                      	|
-|  server.pretend 	|   String  	| domain name 	| the domain name of the website that the server pretend to be 	|
+|      Field      | TOML Type |    Type     |                         Explanation                          |
+| :-------------: | :-------: | :---------: | :----------------------------------------------------------: |
+|    log_file     |  String   |  filename   |                   the filename of log file                   |
+|  client.server  |  String   | domain name |                the domain name of the server                 |
+|   client.port   |  Integer  |  TCP port   |            the local proxy port client listen to             |
+| client.username |  String   |   string    |         the client username, for user authentication         |
+| client.password |  String   |   string    |         the client password, for user authentication         |
+|   client.doh    |  String   |   string    |        the DNS over HTTPS service used in the client         |
+|   server.port   |  Integer  |  TCP port   |           the port server listen to (normally 80)            |
+| server.pretend  |  String   | domain name | the domain name of the website that the server pretend to be |
+|   server.doh    |  String   |   string    |        the DNS over HTTPS service used in the server         |
+|     db.type     |  String   |   string    |                   the type of the database                   |
+|   db.username   |  String   |   string    |           the username for the database connection           |
+|   db.password   |  String   |   string    |           the password for the database connection           |
+|     db.host     |  String   |   string    |           the hostname for the database connection           |
+|     db.port     |  Integer  |  TCP port   |             the port for the database connection             |
+|   db.database   |  String   |   string    |                   the name of the database                   |
 
 ### Server
 ```sudo``` is required for listening on port 80

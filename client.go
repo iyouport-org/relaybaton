@@ -102,6 +102,10 @@ func (client *Client) Run() {
 	for {
 		select {
 		case <-client.close:
+			err = sl.Close()
+			if err != nil {
+				log.Error(err)
+			}
 			return
 		default:
 			client.mutexWsRead.Lock()
@@ -363,14 +367,23 @@ func getESNIKey(domain string) (*tls.ESNIKeys, error) {
 		return nil, err
 	}
 	answer := rsp.Answer
-	esniRecord, err := base64.StdEncoding.DecodeString(answer[0].Data[1 : len(answer[0].Data)-1])
+	//rawRecord := strings.ReplaceAll(answer[0].Data, "+", "") //test
+	rawRecord := answer[0].Data
+	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord[1 : len(rawRecord)-1])
 	if err != nil {
-		log.WithField("domain", "_esni."+domain).Error(err)
+		log.WithFields(log.Fields{
+			"domain": "_esni." + domain,
+			"answer": rawRecord,
+			"record": rawRecord[1 : len(rawRecord)-1],
+		}).Error(err)
 		return nil, err
 	}
 	esniKey, err := tls.ParseESNIKeys(esniRecord)
 	if err != nil {
-		log.WithField("domain", "_esni."+domain).Error(err)
+		log.WithFields(log.Fields{
+			"domain":     "_esni." + domain,
+			"esniRecord": esniRecord,
+		}).Error(err)
 		return nil, err
 	}
 	return esniKey, nil
