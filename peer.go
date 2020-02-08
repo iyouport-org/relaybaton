@@ -144,6 +144,11 @@ func (peer *peer) Close() error {
 	if err != nil {
 		log.Debug(err)
 	}
+	for i := uint16(0); i < 65535; i++ {
+		if peer.connPool.get(i) != nil {
+			peer.connPool.delete(i)
+		}
+	}
 	peer.close <- 0
 	peer.close <- 1
 	peer.close <- 2

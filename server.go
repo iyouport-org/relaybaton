@@ -8,13 +8,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/socks5"
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mssql"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
+	_ "github.com/jinzhu/gorm/dialects/mysql"    //mysql
+	_ "github.com/jinzhu/gorm/dialects/postgres" //postgres
+	_ "github.com/jinzhu/gorm/dialects/sqlite"   //sqlite
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
 	"io/ioutil"
@@ -87,7 +88,11 @@ func (server *Server) handleWsReadServer(content []byte) {
 		} else {
 			var dstAddrs []net.IP
 			dstAddrs, err = net.LookupIP(bytes.NewBuffer(b[7:]).String())
-			dstAddr = dstAddrs[0]
+			if len(dstAddrs) > 0 {
+				dstAddr = dstAddrs[0]
+			} else {
+				err = errors.New(fmt.Sprintf("cannot lookup IP for: %s", bytes.NewBuffer(b[7:]).String()))
+			}
 		}
 		if err != nil {
 			log.Error(err)
@@ -181,7 +186,7 @@ func (handler Handler) authenticate(header http.Header) error {
 	}
 	if len(data) < 12 {
 		err = errors.New("authentication failed: data too short")
-		log.Error(err)
+		log.WithField("data", data).Error(err)
 		return err
 	}
 	nonce, cipherText := data[:12], data[12:]

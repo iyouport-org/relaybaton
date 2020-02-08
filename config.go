@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"github.com/iyouport-org/doh-go"
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mssql"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
+	_ "github.com/jinzhu/gorm/dialects/mysql"    //mysql
+	_ "github.com/jinzhu/gorm/dialects/postgres" //postgres
+	_ "github.com/jinzhu/gorm/dialects/sqlite"   //sqlite
 	log "github.com/sirupsen/logrus"
 )
 
@@ -59,7 +59,7 @@ func (dbc dbConfig) getDB() (*gorm.DB, error) {
 	case "mysql":
 		connStr = fmt.Sprintf("%s:%s@(%s)/%s?charset=utf8&parseTime=True&loc=Local", dbc.Username, dbc.Password, dbc.Host, dbc.Database)
 	case "postgresql":
-		connStr = fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s", dbc.Host, dbc.Port, dbc.Username, dbc.Database, dbc.Password)
+		connStr = fmt.Sprintf("host=%s port=%d User=%s dbname=%s password=%s", dbc.Host, dbc.Port, dbc.Username, dbc.Database, dbc.Password)
 	case "sqlite3":
 		connStr = dbc.Database
 	case "sqlserver":

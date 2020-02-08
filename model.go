@@ -2,10 +2,10 @@ package relaybaton
 
 import (
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mssql"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
-	_ "github.com/jinzhu/gorm/dialects/postgres"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
+	_ "github.com/jinzhu/gorm/dialects/mysql"    //mysql
+	_ "github.com/jinzhu/gorm/dialects/postgres" //postgres
+	_ "github.com/jinzhu/gorm/dialects/sqlite"   //sqlite
 )
 
 type User struct {
