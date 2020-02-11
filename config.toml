@@ -1,4 +1,4 @@
-log_file="./log.txt"
+log_file="./log.xml"
 
 [client]
 server="example.com"

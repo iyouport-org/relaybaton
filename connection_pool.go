@@ -38,15 +38,12 @@ func (cp *connectionPool) set(index uint16, conn *net.Conn) {
 
 func (cp *connectionPool) delete(index uint16) {
 	cp.mutex.Lock()
-	cp.conns[index] = nil
-	cp.mutex.Unlock()
-}
-
-func (cp *connectionPool) close(index uint16) {
-	cp.mutex.Lock()
-	err := (*cp.conns[index]).Close()
-	if err != nil {
-		log.Error(err)
+	if cp.conns[index] != nil {
+		err := (*cp.conns[index]).Close()
+		if err != nil {
+			log.WithField("session", index).Warn(err)
+		}
+		cp.conns[index] = nil
 	}
 	cp.mutex.Unlock()
 }

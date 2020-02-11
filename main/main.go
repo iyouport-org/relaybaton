@@ -34,10 +34,7 @@ func main() {
 	}
 	log.SetOutput(file)
 	log.SetLevel(log.TraceLevel)
-	log.SetFormatter(&log.JSONFormatter{
-		PrettyPrint:     true,
-		TimestampFormat: "2006-01-02 15:04:05.0000000",
-	})
+	log.SetFormatter(relaybaton.XMLFormatter{})
 	log.SetReportCaller(true)
 
 	switch os.Args[1] {
@@ -46,6 +43,7 @@ func main() {
 			client, err := relaybaton.NewClient(conf)
 			if err != nil {
 				log.Error(err)
+				time.Sleep(5 * time.Second)
 				continue
 			}
 			client.Run()

@@ -74,7 +74,7 @@ func NewClient(conf Config) (*Client, error) {
 		return nil, err
 	}
 
-	client.wsConn, _, err = dialer.Dial(u.String(), header) //Add ESNI support later
+	client.wsConn, _, err = dialer.Dial(u.String(), header)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -99,14 +99,11 @@ func (client *Client) Run() {
 	go client.listenSocks(sl)
 	go client.peer.processQueue()
 
+LOOP:
 	for {
 		select {
 		case <-client.close:
-			err = sl.Close()
-			if err != nil {
-				log.Error(err)
-			}
-			return
+			break LOOP
 		default:
 			client.mutexWsRead.Lock()
 			_, content, err := client.wsConn.ReadMessage()
@@ -116,10 +113,14 @@ func (client *Client) Run() {
 				if err != nil {
 					log.Error(err)
 				}
-				return
+				break LOOP
 			}
 			go client.handleWsReadClient(content, client.wsConn)
 		}
+	}
+	err = sl.Close()
+	if err != nil {
+		log.Error(err)
 	}
 }
 
@@ -235,21 +236,13 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 		err := reply.WriteTo(*conn)
 		if err != nil {
 			log.WithField("session", session).Error(err)
-			err = (*conn).Close()
-			if err != nil {
-				log.Error(err)
-			}
+			client.connPool.delete(session)
 			_, err = wsw.writeClose()
 			if err != nil {
 				log.Error(err)
 			}
-			client.connPool.delete(session)
 		}
 		if rep != socks5.RepSuccess {
-			err = (*client.connPool.get(session)).Close()
-			if err != nil {
-				log.Error(err)
-			}
 			client.connPool.delete(session)
 		}
 
@@ -367,7 +360,6 @@ func getESNIKey(domain string) (*tls.ESNIKeys, error) {
 		return nil, err
 	}
 	answer := rsp.Answer
-	//rawRecord := strings.ReplaceAll(answer[0].Data, "+", "") //test
 	rawRecord := answer[0].Data
 	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord[1 : len(rawRecord)-1])
 	if err != nil {
