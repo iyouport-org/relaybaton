@@ -12,6 +12,11 @@ port=80
 pretend="www.kernel.org"
 doh="null"    #null, cloudflare, quad9
 
+[dns]
+type="dot"
+server="cloudflare-dns.com"
+addr="1.0.0.1:853"
+
 [db]
 type="sqlite3" #sqlite3, mysql, postgresql, sqlserver
 username="root"

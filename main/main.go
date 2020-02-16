@@ -39,8 +39,16 @@ func main() {
 	log.SetFormatter(relaybaton.XMLFormatter{})
 	log.SetReportCaller(true)
 
-	if conf.Client.DoH == "dot" {
-		net.DefaultResolver = dns.NewDoTResolverFactory(net.Dialer{}, "cloudflare-dns.com", "1.0.0.1:853", false).GetResolver()
+	switch conf.DNS.Type {
+	case "dot":
+		net.DefaultResolver = dns.NewDoTResolverFactory(net.Dialer{}, conf.DNS.Server, conf.DNS.Addr, false).GetResolver()
+	case "doh":
+		factory, err := dns.NewDoHResolverFactory(net.Dialer{}, 11111, conf.DNS.Server, conf.DNS.Addr, false, time.Minute)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		net.DefaultResolver = factory.GetResolver()
 	}
 
 	switch os.Args[1] {

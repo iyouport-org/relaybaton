@@ -20,15 +20,14 @@ type DoHResolverFactory struct {
 	port            uint16
 	ip              net.IP
 	url             url.URL
-	preferGo        bool
 	strictErrors    bool
 	keepAlivePeriod time.Duration
 	server          dns.Server
 	client          http.Client
 }
 
-func NewDoHResolverFactory(dialer net.Dialer, port uint16, urlStr string, ipStr string, preferGo bool, strictErrors bool, keepAlivePeriod time.Duration) (*DoHResolverFactory, error) {
-	u, err := url.ParseRequestURI(urlStr)
+func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ipStr string, strictErrors bool, keepAlivePeriod time.Duration) (*DoHResolverFactory, error) {
+	u, err := url.ParseRequestURI("https://" + serverName + "/dns-query")
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +42,6 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, urlStr string, ipStr 
 		port:            port,
 		url:             *u,
 		ip:              ip,
-		preferGo:        preferGo,
 		strictErrors:    strictErrors,
 		keepAlivePeriod: keepAlivePeriod,
 		server: dns.Server{
@@ -70,7 +68,6 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, urlStr string, ipStr 
 
 func (factory DoHResolverFactory) GetResolver() *net.Resolver {
 	resolver := &net.Resolver{
-		PreferGo:     factory.preferGo,
 		StrictErrors: factory.strictErrors,
 		Dial:         factory.getDialFunction(),
 	}

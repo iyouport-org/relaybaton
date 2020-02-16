@@ -35,13 +35,9 @@ func NewClient(conf Config) (*Client, error) {
 	var err error
 	client := &Client{}
 	client.init(conf)
-	dohProvider := getDoHProvider(conf.Client.DoH)
-	if dohProvider == -1 {
-		err := errors.New("unknown doh provider")
-		log.Error(err)
-		return nil, err
-	}
+
 	var dstAddr net.IP
+
 	if conf.Client.DoH != "dot" {
 		dstAddr, _, err = nsLookupDoH(conf.Client.Server, 4, dohProvider)
 		if err != nil {
