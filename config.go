@@ -3,7 +3,6 @@ package relaybaton
 import (
 	"errors"
 	"fmt"
-	"github.com/iyouport-org/doh-go"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
 	_ "github.com/jinzhu/gorm/dialects/mysql"    //mysql
@@ -17,6 +16,7 @@ type Config struct {
 	LogFile string       `mapstructure:"log_file"`
 	Client  clientConfig `mapstructure:"client"`
 	Server  serverConfig `mapstructure:"server"`
+	DNS     dnsConfig    `mapstructure:"dns"`
 	DB      dbConfig     `mapstructure:"db"`
 }
 
@@ -25,13 +25,18 @@ type clientConfig struct {
 	Port     int    `mapstructure:"port"`
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
-	DoH      string `mapstructure:"doh"`
 }
 
 type serverConfig struct {
 	Port    int    `mapstructure:"port"`
 	Pretend string `mapstructure:"pretend"`
-	DoH     string `mapstructure:"doh"`
+}
+
+type dnsConfig struct {
+	Type         string `mapstructure:"type"`
+	Server       string `mapstructure:"server"`
+	Addr         string `mapstructure:"addr"`
+	LocalResolve bool   `mapstructure:"local_resolve"`
 }
 
 type dbConfig struct {
@@ -41,16 +46,6 @@ type dbConfig struct {
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`
 	Database string `mapstructure:"database"`
-}
-
-func getDoHProvider(provider string) int {
-	if provider == "cloudflare" {
-		return doh.CloudflareProvider
-	}
-	if provider == "quad9" {
-		return doh.Quad9Provider
-	}
-	return -1
 }
 
 func (dbc dbConfig) getDB() (*gorm.DB, error) {

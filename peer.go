@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 )
 
 type peer struct {
@@ -42,15 +41,11 @@ func (peer *peer) forward(session uint16) {
 	if err != nil {
 		log.Error(err)
 	}
-	err = (*conn).Close()
-	if err != nil {
-		log.WithField("session", session).Error(err)
-	}
+	peer.connPool.delete(session)
 	_, err = wsw.writeClose()
 	if err != nil {
 		log.WithField("session", session).Error(err)
 	}
-	peer.connPool.delete(session)
 }
 
 func (peer *peer) receive(session uint16, data []byte) {
@@ -70,27 +65,18 @@ func (peer *peer) receive(session uint16, data []byte) {
 	_, err := (*conn).Write(data)
 	if err != nil {
 		log.WithField("session", session).Error(err)
-		err = (*conn).Close()
-		if err != nil {
-			log.Error(err)
-		}
+		peer.connPool.delete(session)
 		_, err = wsw.writeClose()
 		if err != nil {
 			log.Error(err)
 		}
-		peer.connPool.delete(session)
 	}
 }
 
 func (peer *peer) delete(session uint16) {
 	conn := peer.connPool.get(session)
 	if conn != nil {
-		err := (*conn).Close()
-		if err != nil {
-			log.Error(err)
-		}
 		peer.connPool.delete(session)
-
 		log.Debugf("Port %d Deleted", session)
 	}
 	peer.connPool.setCloseSent(session)
@@ -140,17 +126,17 @@ func (peer *peer) processQueue() {
 
 func (peer *peer) Close() error {
 	log.Debug("closing peer")
+	peer.close <- 0
 	err := peer.wsConn.Close()
 	if err != nil {
 		log.Debug(err)
 	}
+	peer.close <- 1
 	for i := uint16(0); i < 65535; i++ {
 		if peer.connPool.get(i) != nil {
 			peer.connPool.delete(i)
 		}
 	}
-	peer.close <- 0
-	peer.close <- 1
 	peer.close <- 2
 	return err
 }
@@ -161,11 +147,11 @@ func uint16ToBytes(n uint16) []byte {
 	return buf
 }
 
-func nsLookup(domain string, ipv byte, provider int) (net.IP, byte, error) {
+func nsLookupDoH(domain string, ipv byte, provider int) (net.IP, byte, error) {
 	var dstAddr net.IP
 	dstAddr = nil
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := doh.New(provider)
 

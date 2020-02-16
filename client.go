@@ -2,7 +2,6 @@ package relaybaton
 
 import (
 	"compress/flate"
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -12,8 +11,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gorilla/websocket"
-	"github.com/iyouport-org/doh-go"
-	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
@@ -32,19 +29,10 @@ type Client struct {
 
 // NewClient creates a new client using the given config.
 func NewClient(conf Config) (*Client, error) {
+	var err error
 	client := &Client{}
 	client.init(conf)
-	dohProvider := getDoHProvider(conf.Client.DoH)
-	if dohProvider == -1 {
-		err := errors.New("unknown doh provider")
-		log.Error(err)
-		return nil, err
-	}
-	dstAddr, _, err := nsLookup(conf.Client.Server, 4, dohProvider)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
+
 	u := url.URL{
 		Scheme: "wss",
 		Host:   conf.Client.Server + ":443",
@@ -58,9 +46,6 @@ func NewClient(conf Config) (*Client, error) {
 	}
 
 	dialer := websocket.Dialer{
-		NetDial: func(network, addr string) (net.Conn, error) {
-			return net.Dial("tcp", dstAddr.String()+":443")
-		},
 		TLSClientConfig: &tls.Config{
 			ClientESNIKeys: esniKey,
 			ServerName:     conf.Client.Server,
@@ -74,7 +59,7 @@ func NewClient(conf Config) (*Client, error) {
 		return nil, err
 	}
 
-	client.wsConn, _, err = dialer.Dial(u.String(), header) //Add ESNI support later
+	client.wsConn, _, err = dialer.Dial(u.String(), header)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -99,14 +84,11 @@ func (client *Client) Run() {
 	go client.listenSocks(sl)
 	go client.peer.processQueue()
 
+LOOP:
 	for {
 		select {
 		case <-client.close:
-			err = sl.Close()
-			if err != nil {
-				log.Error(err)
-			}
-			return
+			break LOOP
 		default:
 			client.mutexWsRead.Lock()
 			_, content, err := client.wsConn.ReadMessage()
@@ -116,10 +98,14 @@ func (client *Client) Run() {
 				if err != nil {
 					log.Error(err)
 				}
-				return
+				break LOOP
 			}
 			go client.handleWsReadClient(content, client.wsConn)
 		}
+	}
+	err = sl.Close()
+	if err != nil {
+		log.Error(err)
 	}
 }
 
@@ -146,7 +132,7 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 		log.Error(err)
 		return nil, err
 	}
-	atyp, addr, port, err := resolve(address)
+	atyp, addr, port, err := client.resolve(address)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -187,7 +173,7 @@ func (client *Client) listenSocks(sl net.Listener) {
 			}
 			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
 			wsw := client.getWebsocketWriter(port)
-			err = serveSocks5(&s5conn, &wsw)
+			err = client.serveSocks5(&s5conn, &wsw)
 			if err != nil {
 				log.Error(err)
 				err = s5conn.Close()
@@ -235,21 +221,13 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 		err := reply.WriteTo(*conn)
 		if err != nil {
 			log.WithField("session", session).Error(err)
-			err = (*conn).Close()
-			if err != nil {
-				log.Error(err)
-			}
+			client.connPool.delete(session)
 			_, err = wsw.writeClose()
 			if err != nil {
 				log.Error(err)
 			}
-			client.connPool.delete(session)
 		}
 		if rep != socks5.RepSuccess {
-			err = (*client.connPool.get(session)).Close()
-			if err != nil {
-				log.Error(err)
-			}
 			client.connPool.delete(session)
 		}
 
@@ -259,7 +237,7 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 	}
 }
 
-func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
+func (client *Client) resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	addrTCP, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		log.Debug(err)
@@ -284,7 +262,31 @@ func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	return socks5.ATYPIPv6, []byte(addrTCP.IP.To16().String()), uint16(addrTCP.Port), nil
 }
 
-func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
+func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, error) {
+	if request.Atyp == socks5.ATYPDomain && client.conf.DNS.LocalResolve {
+		ips, err := net.LookupIP(string(request.DstAddr[1:]))
+		log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP")
+		if err != nil {
+			log.Debug(err)
+			return nil, err
+		}
+		if len(ips) > 0 {
+			for _, ip := range ips {
+				if ip.To4() != nil {
+					log.Debug(ip.To4())
+					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv4, ip.To4(), request.DstPort), nil
+				}
+				if ip.To16() != nil {
+					log.Debug(ip.To16())
+					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv6, ip.To16(), request.DstPort), nil
+				}
+			}
+		}
+	}
+	return request, nil
+}
+
+func (client *Client) serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 	negotiationRequest, err := socks5.NewNegotiationRequestFrom(*conn)
 	if err != nil {
 		log.Error(err)
@@ -318,7 +320,12 @@ func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 		log.Error(err)
 		return err
 	}
-	_, err = wsw.writeConnect(*request)
+	newRequest, err := client.localResolve(request)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	_, err = wsw.writeConnect(*newRequest)
 	if err != nil {
 		log.Error(err)
 		return err
@@ -358,30 +365,22 @@ func buildHeader(conf Config) (http.Header, error) {
 }
 
 func getESNIKey(domain string) (*tls.ESNIKeys, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	defer cancel()
-	c := doh.New(doh.CloudflareProvider)
-	rsp, err := c.Query(ctx, dns.Domain("_esni."+domain), dns.TypeTXT)
+	txt, err := net.LookupTXT("_esni." + domain)
 	if err != nil {
-		log.WithField("domain", "_esni."+domain).Error(err)
+		log.Error(err)
 		return nil, err
 	}
-	answer := rsp.Answer
-	//rawRecord := strings.ReplaceAll(answer[0].Data, "+", "") //test
-	rawRecord := answer[0].Data
-	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord[1 : len(rawRecord)-1])
+	rawRecord := txt[0]
+	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"domain": "_esni." + domain,
-			"answer": rawRecord,
-			"record": rawRecord[1 : len(rawRecord)-1],
+			"rawRecord": rawRecord,
 		}).Error(err)
 		return nil, err
 	}
 	esniKey, err := tls.ParseESNIKeys(esniRecord)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"domain":     "_esni." + domain,
 			"esniRecord": esniRecord,
 		}).Error(err)
 		return nil, err
