@@ -2,8 +2,10 @@ package main
 
 import (
 	"github.com/iyouport-org/relaybaton"
+	"github.com/iyouport-org/relaybaton/dns"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,9 +13,9 @@ import (
 )
 
 func main() {
-	err := os.Setenv("GODEBUG", os.Getenv("GODEBUG")+",tls13=1")
+	err := os.Setenv("GODEBUG", os.Getenv("GODEBUG")+",tls13=1,netdns=go")
 	if err != nil {
-		log.Error(err)
+		log.Fatal(err)
 		return
 	}
 	v := viper.New()
@@ -36,6 +38,10 @@ func main() {
 	log.SetLevel(log.TraceLevel)
 	log.SetFormatter(relaybaton.XMLFormatter{})
 	log.SetReportCaller(true)
+
+	if conf.Client.DoH == "dot" {
+		net.DefaultResolver = dns.NewDoTResolverFactory(net.Dialer{}, "cloudflare-dns.com", "1.0.0.1:853", false).GetResolver()
+	}
 
 	switch os.Args[1] {
 	case "client":

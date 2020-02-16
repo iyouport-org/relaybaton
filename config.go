@@ -50,6 +50,9 @@ func getDoHProvider(provider string) int {
 	if provider == "quad9" {
 		return doh.Quad9Provider
 	}
+	if provider == "dot" {
+		return -2
+	}
 	return -1
 }
 

@@ -147,7 +147,7 @@ func uint16ToBytes(n uint16) []byte {
 	return buf
 }
 
-func nsLookup(domain string, ipv byte, provider int) (net.IP, byte, error) {
+func nsLookupDoH(domain string, ipv byte, provider int) (net.IP, byte, error) {
 	var dstAddr net.IP
 	dstAddr = nil
 

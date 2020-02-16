@@ -84,7 +84,7 @@ func (server *Server) handleWsReadServer(content []byte) {
 		if prefix != uint16(socks5.ATYPDomain) {
 			dstAddr = b[6:]
 		} else if dohProvider != -1 {
-			dstAddr, ipVer, err = nsLookup(bytes.NewBuffer(b[7:]).String(), 6, dohProvider)
+			dstAddr, ipVer, err = nsLookupDoH(bytes.NewBuffer(b[7:]).String(), 6, dohProvider)
 		} else {
 			var dstAddrs []net.IP
 			dstAddrs, err = net.LookupIP(bytes.NewBuffer(b[7:]).String())
