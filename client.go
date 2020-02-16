@@ -2,7 +2,6 @@ package relaybaton
 
 import (
 	"compress/flate"
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -12,8 +11,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gorilla/websocket"
-	"github.com/iyouport-org/doh-go"
-	"github.com/iyouport-org/doh-go/dns"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
@@ -36,52 +33,24 @@ func NewClient(conf Config) (*Client, error) {
 	client := &Client{}
 	client.init(conf)
 
-	var dstAddr net.IP
-
-	if conf.Client.DoH != "dot" {
-		dstAddr, _, err = nsLookupDoH(conf.Client.Server, 4, dohProvider)
-		if err != nil {
-			log.Error(err)
-			return nil, err
-		}
-	}
 	u := url.URL{
 		Scheme: "wss",
 		Host:   conf.Client.Server + ":443",
 		Path:   "/",
 	}
 
-	var esniKey *tls.ESNIKeys
-	if conf.Client.DoH != "dot" {
-		esniKey, err = getESNIKeyDoH(conf.Client.Server)
-	} else {
-		esniKey, err = getESNIKeyDoT(conf.Client.Server)
-	}
+	esniKey, err := getESNIKey(conf.Client.Server)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
 
-	var dialer websocket.Dialer
-	if conf.Client.DoH != "dot" {
-		dialer = websocket.Dialer{
-			NetDial: func(network, addr string) (net.Conn, error) {
-				return net.Dial("tcp", dstAddr.String()+":443")
-			},
-			TLSClientConfig: &tls.Config{
-				ClientESNIKeys: esniKey,
-				ServerName:     conf.Client.Server,
-			},
-			EnableCompression: true,
-		}
-	} else {
-		dialer = websocket.Dialer{
-			TLSClientConfig: &tls.Config{
-				ClientESNIKeys: esniKey,
-				ServerName:     conf.Client.Server,
-			},
-			EnableCompression: true,
-		}
+	dialer := websocket.Dialer{
+		TLSClientConfig: &tls.Config{
+			ClientESNIKeys: esniKey,
+			ServerName:     conf.Client.Server,
+		},
+		EnableCompression: true,
 	}
 
 	header, err := buildHeader(conf)
@@ -366,38 +335,19 @@ func buildHeader(conf Config) (http.Header, error) {
 	return header, nil
 }
 
-func getESNIKeyDoH(domain string) (*tls.ESNIKeys, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	defer cancel()
-	c := doh.New(doh.CloudflareProvider)
-	rsp, err := c.Query(ctx, dns.Domain("_esni."+domain), dns.TypeTXT)
-	if err != nil {
-		log.WithField("domain", "_esni."+domain).Error(err)
-		return nil, err
-	}
-	answer := rsp.Answer
-	return processESNIRecord(answer[0].Data)
-}
-
-func getESNIKeyDoT(domain string) (*tls.ESNIKeys, error) {
+func getESNIKey(domain string) (*tls.ESNIKeys, error) {
 	txt, err := net.LookupTXT("_esni." + domain)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	return processESNIRecord(txt[0])
-}
-
-func processESNIRecord(rawRecord string) (*tls.ESNIKeys, error) {
+	rawRecord := txt[0]
 	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord)
 	if err != nil {
-		esniRecord, err = base64.StdEncoding.DecodeString(rawRecord[1 : len(rawRecord)-1])
-		if err != nil {
-			log.WithFields(log.Fields{
-				"answer": rawRecord,
-			}).Error(err)
-			return nil, err
-		}
+		log.WithFields(log.Fields{
+			"rawRecord": rawRecord,
+		}).Error(err)
+		return nil, err
 	}
 	esniKey, err := tls.ParseESNIKeys(esniRecord)
 	if err != nil {
