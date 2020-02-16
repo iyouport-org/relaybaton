@@ -132,7 +132,7 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 		log.Error(err)
 		return nil, err
 	}
-	atyp, addr, port, err := resolve(address)
+	atyp, addr, port, err := client.resolve(address)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -173,7 +173,7 @@ func (client *Client) listenSocks(sl net.Listener) {
 			}
 			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
 			wsw := client.getWebsocketWriter(port)
-			err = serveSocks5(&s5conn, &wsw)
+			err = client.serveSocks5(&s5conn, &wsw)
 			if err != nil {
 				log.Error(err)
 				err = s5conn.Close()
@@ -237,7 +237,7 @@ func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn)
 	}
 }
 
-func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
+func (client *Client) resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	addrTCP, err := net.ResolveTCPAddr("tcp", address)
 	if err != nil {
 		log.Debug(err)
@@ -262,7 +262,31 @@ func resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
 	return socks5.ATYPIPv6, []byte(addrTCP.IP.To16().String()), uint16(addrTCP.Port), nil
 }
 
-func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
+func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, error) {
+	if request.Atyp == socks5.ATYPDomain && client.conf.DNS.LocalResolve {
+		ips, err := net.LookupIP(string(request.DstAddr[1:]))
+		log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP")
+		if err != nil {
+			log.Debug(err)
+			return nil, err
+		}
+		if len(ips) > 0 {
+			for _, ip := range ips {
+				if ip.To4() != nil {
+					log.Debug(ip.To4())
+					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv4, ip.To4(), request.DstPort), nil
+				}
+				if ip.To16() != nil {
+					log.Debug(ip.To16())
+					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv6, ip.To16(), request.DstPort), nil
+				}
+			}
+		}
+	}
+	return request, nil
+}
+
+func (client *Client) serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 	negotiationRequest, err := socks5.NewNegotiationRequestFrom(*conn)
 	if err != nil {
 		log.Error(err)
@@ -296,7 +320,12 @@ func serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 		log.Error(err)
 		return err
 	}
-	_, err = wsw.writeConnect(*request)
+	newRequest, err := client.localResolve(request)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	_, err = wsw.writeConnect(*newRequest)
 	if err != nil {
 		log.Error(err)
 		return err

@@ -33,9 +33,10 @@ type serverConfig struct {
 }
 
 type dnsConfig struct {
-	Type   string `mapstructure:"type"`
-	Server string `mapstructure:"server"`
-	Addr   string `mapstructure:"addr"`
+	Type         string `mapstructure:"type"`
+	Server       string `mapstructure:"server"`
+	Addr         string `mapstructure:"addr"`
+	LocalResolve bool   `mapstructure:"local_resolve"`
 }
 
 type dbConfig struct {
