@@ -265,7 +265,7 @@ func (client *Client) resolve(address string) (atyp byte, addr []byte, port uint
 func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, error) {
 	if request.Atyp == socks5.ATYPDomain && client.conf.DNS.LocalResolve {
 		ips, err := net.LookupIP(string(request.DstAddr[1:]))
-		log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP")
+		log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP") //test
 		if err != nil {
 			log.Debug(err)
 			return nil, err
@@ -273,11 +273,11 @@ func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, er
 		if len(ips) > 0 {
 			for _, ip := range ips {
 				if ip.To4() != nil {
-					log.Debug(ip.To4())
+					log.Debug(ip.To4()) //test
 					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv4, ip.To4(), request.DstPort), nil
 				}
 				if ip.To16() != nil {
-					log.Debug(ip.To16())
+					log.Debug(ip.To16()) //test
 					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv6, ip.To16(), request.DstPort), nil
 				}
 			}

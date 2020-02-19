@@ -12,21 +12,19 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 type DoHResolverFactory struct {
-	dialer          net.Dialer
-	port            uint16
-	ip              net.IP
-	url             url.URL
-	strictErrors    bool
-	keepAlivePeriod time.Duration
-	server          dns.Server
-	client          http.Client
+	dialer       net.Dialer
+	port         uint16
+	ip           net.IP
+	url          url.URL
+	strictErrors bool
+	server       dns.Server
+	client       http.Client
 }
 
-func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ipStr string, strictErrors bool, keepAlivePeriod time.Duration) (*DoHResolverFactory, error) {
+func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ipStr string, strictErrors bool) (*DoHResolverFactory, error) {
 	u, err := url.ParseRequestURI("https://" + serverName + "/dns-query")
 	if err != nil {
 		return nil, err
@@ -38,12 +36,11 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ip
 		return nil, err
 	}
 	factory := &DoHResolverFactory{
-		dialer:          dialer,
-		port:            port,
-		url:             *u,
-		ip:              ip,
-		strictErrors:    strictErrors,
-		keepAlivePeriod: keepAlivePeriod,
+		dialer:       dialer,
+		port:         port,
+		url:          *u,
+		ip:           ip,
+		strictErrors: strictErrors,
 		server: dns.Server{
 			Addr: fmt.Sprintf(":%d", port),
 			Net:  "tcp",
@@ -78,14 +75,13 @@ func (factory DoHResolverFactory) getDialFunction() func(ctx context.Context, ne
 	return func(ctx context.Context, network string, address string) (net.Conn, error) {
 		conn, err := factory.dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", factory.port))
 		if err != nil {
-			return nil, err
-		}
-		err = conn.(*net.TCPConn).SetKeepAlive(true)
-		if err != nil {
-			return nil, err
-		}
-		err = conn.(*net.TCPConn).SetKeepAlivePeriod(factory.keepAlivePeriod)
-		if err != nil {
+			log.Error(err)
+			if conn != nil {
+				err = conn.Close()
+				if err != nil {
+					log.Error(err)
+				}
+			}
 			return nil, err
 		}
 		return conn, nil

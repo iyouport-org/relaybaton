@@ -45,12 +45,16 @@ server="example.com"
 port=1081
 username="username"
 password="password"
-doh="cloudflare"    #cloudflare, quad9
 
 [server]
 port=80
 pretend="www.kernel.org"
-doh="null"    #null, cloudflare, quad9
+
+[dns]
+type="dot"
+server="cloudflare-dns.com"
+addr="1.0.0.1:853"
+local_resolve=true
 
 [db]
 type="sqlite3" #sqlite3, mysql, postgresql, sqlserver

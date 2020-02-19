@@ -1,7 +1,6 @@
 package relaybaton
 
 import (
-	"bytes"
 	"compress/flate"
 	"crypto/aes"
 	"crypto/cipher"
@@ -84,11 +83,11 @@ func (server *Server) handleWsReadServer(content []byte) {
 			dstAddr = b[6:]
 		} else {
 			var dstAddrs []net.IP
-			dstAddrs, err = net.LookupIP(bytes.NewBuffer(b[7:]).String())
+			dstAddrs, err = net.LookupIP(string(b[7:]))
 			if len(dstAddrs) > 0 {
 				dstAddr = dstAddrs[0]
 			} else {
-				err = errors.New(fmt.Sprintf("cannot lookup IP for: %s", bytes.NewBuffer(b[7:]).String()))
+				err = errors.New(fmt.Sprintf("cannot lookup IP for: %s", string(b[7:])))
 			}
 		}
 		if err != nil {
