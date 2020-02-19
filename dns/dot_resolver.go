@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	log "github.com/sirupsen/logrus"
 	"net"
-	"time"
 )
 
 type DoTResolverFactory struct {
@@ -38,16 +37,12 @@ func (factory DoTResolverFactory) getDialFunction() func(ctx context.Context, ne
 		conn, err := factory.dialer.DialContext(context, "tcp", factory.addr)
 		if err != nil {
 			log.Error(err)
-			return nil, err
-		}
-		err = conn.(*net.TCPConn).SetKeepAlive(true)
-		if err != nil {
-			log.Error(err)
-			return nil, err
-		}
-		err = conn.(*net.TCPConn).SetKeepAlivePeriod(10 * time.Minute)
-		if err != nil {
-			log.Error(err)
+			if conn != nil {
+				err = conn.Close()
+				if err != nil {
+					log.Error(err)
+				}
+			}
 			return nil, err
 		}
 		return tls.Client(conn, &factory.tlsConfig), nil

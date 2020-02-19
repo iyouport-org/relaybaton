@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 )
 
 func main() {
@@ -43,7 +42,7 @@ func main() {
 	case "dot":
 		net.DefaultResolver = dns.NewDoTResolverFactory(net.Dialer{}, conf.DNS.Server, conf.DNS.Addr, false).GetResolver()
 	case "doh":
-		factory, err := dns.NewDoHResolverFactory(net.Dialer{}, 11111, conf.DNS.Server, conf.DNS.Addr, false, time.Minute)
+		factory, err := dns.NewDoHResolverFactory(net.Dialer{}, 11111, conf.DNS.Server, conf.DNS.Addr, false)
 		if err != nil {
 			log.Error(err)
 			return
@@ -57,11 +56,9 @@ func main() {
 			client, err := relaybaton.NewClient(conf)
 			if err != nil {
 				log.Error(err)
-				time.Sleep(5 * time.Second)
 				continue
 			}
 			client.Run()
-			time.Sleep(5 * time.Second)
 		}
 	case "server":
 		handler := relaybaton.Handler{
