@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
+	"github.com/iyouport-org/relaybaton/message"
+	"github.com/iyouport-org/relaybaton/util"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
@@ -103,7 +105,7 @@ LOOP:
 				}
 				break LOOP
 			}
-			go client.handleWsReadClient(content)
+			go client.handleWsRead(content)
 		}
 	}
 	err = sl.Close()
@@ -137,58 +139,50 @@ func (client *Client) listenSocks(sl net.Listener) {
 				}
 				return
 			}
-
 			go client.serveSocks5(s5conn)
 		}
 	}
 }
 
-func (client *Client) handleWsReadClient(content []byte) {
+func (client *Client) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
 	client.mutexWsRead.Unlock()
-	prefix := binary.BigEndian.Uint16(b[:2])
-	if client.connPool.isCloseSent(prefix) {
+	atyp := b[0]
+	session := binary.BigEndian.Uint16(b[1:3])
+	if client.connPool.isCloseSent(session) {
 		return
 	}
-	switch prefix {
+	switch atyp {
 	case 0: //delete
-		session := binary.BigEndian.Uint16(b[2:])
-		client.delete(session)
-
-	case uint16(socks5.ATYPIPv4), uint16(socks5.ATYPDomain), uint16(socks5.ATYPIPv6):
-		atyp := b[1]
-		session := binary.BigEndian.Uint16(b[2:4])
-		rep := b[4]
-		bndPort := b[5:7]
-		bndAddr := b[7:]
-		reply := socks5.NewReply(rep, atyp, bndAddr, bndPort)
-		wsw := client.getWebsocketWriter(session)
-		conn := client.connPool.get(session)
+		msg := message.UnpackDelete(b)
+		client.delete(msg.Session)
+	case 2: //data
+		msg := message.UnpackData(b)
+		client.receive(msg)
+	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //reply {1,3,4}
+		msg := message.UnpackReply(b)
+		wsw := client.getWebsocketWriter(msg.Session)
+		conn := client.connPool.get(msg.Session)
 		if conn == nil {
-			log.WithField("session", session).Warnf("WebSocket deleted read") //test
+			log.WithField("session", msg.Session).Warn("WebSocket deleted read") //test
 			_, err := wsw.writeClose()
 			if err != nil {
 				log.Error(err)
 			}
 			return
 		}
-		err := reply.WriteTo(*conn)
+		err := msg.GetReply().WriteTo(*conn)
 		if err != nil {
-			log.WithField("session", session).Error(err)
-			client.connPool.delete(session)
+			log.WithField("session", msg.Session).Warn(err)
+			client.connPool.delete(msg.Session)
 			_, err = wsw.writeClose()
 			if err != nil {
 				log.Error(err)
 			}
 		}
-		if rep != socks5.RepSuccess {
-			client.connPool.delete(session)
-		}
-
-	default:
-		session := prefix
-		client.receive(session, b[2:])
+	default: //unknown
+		log.WithField("atyp", atyp).Warn("Unknown type message")
 	}
 }
 
@@ -220,7 +214,7 @@ func (client *Client) resolve(address string) (atyp byte, addr []byte, port uint
 func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, error) {
 	if request.Atyp == socks5.ATYPDomain && client.conf.DNS.LocalResolve {
 		ips, err := net.LookupIP(string(request.DstAddr[1:]))
-		//log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP") //test
+		//log.WithField("Domain", string(request.BndAddr[1:])).Debug("Looking up IP") //test
 		if err != nil {
 			log.Debug(err)
 			return nil, err
@@ -262,7 +256,7 @@ func (client *Client) serveSocks5(s5conn net.Conn) {
 			}
 			return
 		}
-		err = socks5.NewReply(socks5.RepSuccess, req.Atyp, net.IP{127, 0, 0, 1}, uint16ToBytes(uint16(client.conf.Client.Port))).WriteTo(s5conn)
+		err = socks5.NewReply(socks5.RepSuccess, req.Atyp, net.IP{127, 0, 0, 1}, util.Uint16ToBytes(uint16(client.conf.Client.Port))).WriteTo(s5conn)
 		if err != nil {
 			log.Error(err)
 			return

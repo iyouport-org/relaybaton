@@ -1,9 +1,9 @@
 package relaybaton
 
 import (
-	"encoding/binary"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
+	"github.com/iyouport-org/relaybaton/message"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"sync"
@@ -43,24 +43,24 @@ func (peer *peer) forward(session uint16) {
 	}
 }
 
-func (peer *peer) receive(session uint16, data []byte) {
-	wsw := peer.getWebsocketWriter(session)
-	conn := peer.connPool.get(session)
+func (peer *peer) receive(msg message.DataMessage) {
+	wsw := peer.getWebsocketWriter(msg.Session)
+	conn := peer.connPool.get(msg.Session)
 	if conn == nil {
-		if peer.connPool.isCloseSent(session) {
+		if peer.connPool.isCloseSent(msg.Session) {
 			return
 		}
-		log.WithField("session", session).Debug("deleted connection read")
+		log.WithField("session", msg.Session).Debug("deleted connection read")
 		_, err := wsw.writeClose()
 		if err != nil {
 			log.Error(err)
 		}
 		return
 	}
-	_, err := (*conn).Write(data)
+	_, err := (*conn).Write(msg.Data)
 	if err != nil {
-		log.WithField("session", session).Error(err)
-		peer.connPool.delete(session)
+		log.WithField("session", msg.Session).Error(err)
+		peer.connPool.delete(msg.Session)
 		_, err = wsw.writeClose()
 		if err != nil {
 			log.Error(err)
@@ -121,6 +121,7 @@ func (peer *peer) processQueue() {
 
 func (peer *peer) Close() error {
 	if len(peer.close) > 0 {
+		peer.close <- 0
 		return nil
 	}
 	log.Debug("closing peer")
@@ -142,10 +143,4 @@ func (peer *peer) Close() error {
 		}
 	}
 	return err
-}
-
-func uint16ToBytes(n uint16) []byte {
-	buf := make([]byte, 2)
-	binary.BigEndian.PutUint16(buf, n)
-	return buf
 }

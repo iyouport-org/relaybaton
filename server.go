@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
+	"github.com/iyouport-org/relaybaton/message"
 	"github.com/iyouport-org/socks5"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
@@ -21,7 +22,6 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -57,32 +57,35 @@ func (server *Server) Run() {
 				}
 				return
 			}
-			go server.handleWsReadServer(content)
+			go server.handleWsRead(content)
 		}
 	}
 }
 
-func (server *Server) handleWsReadServer(content []byte) {
+func (server *Server) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
 	server.mutexWsRead.Unlock()
-	var session uint16
-	prefix := binary.BigEndian.Uint16(b[:2])
-	switch prefix {
+	atyp := b[0]
+	/*session := binary.BigEndian.Uint16(b[1:3])
+	if server.connPool.isCloseSent(session) {	//test
+		return
+	}*/
+	switch atyp {
 	case 0: //delete
-		session = binary.BigEndian.Uint16(b[2:])
-		server.delete(session)
-
-	case uint16(socks5.ATYPIPv4), uint16(socks5.ATYPDomain), uint16(socks5.ATYPIPv6):
-		session = binary.BigEndian.Uint16(b[2:4])
-		dstPort := strconv.Itoa(int(binary.BigEndian.Uint16(b[4:6])))
-		ipVer := b[1]
+		msg := message.UnpackDelete(b)
+		server.delete(msg.Session)
+	case 2: //data
+		msg := message.UnpackData(b)
+		server.receive(msg)
+	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //request {1,3,4}
+		msg := message.UnpackConnect(b)
+		wsw := server.getWebsocketWriter(msg.Session)
 		var dstAddr net.IP
 		var err error
-		wsw := server.getWebsocketWriter(session)
-		if prefix != uint16(socks5.ATYPDomain) {
-			dstAddr = b[6:]
-		} else {
+		if msg.Atyp != socks5.ATYPDomain { //{IPv4,IPv6}
+			dstAddr = msg.DstAddr
+		} else { //Domain
 			var dstAddrs []net.IP
 			dstAddrs, err = net.LookupIP(string(b[7:]))
 			if len(dstAddrs) > 0 {
@@ -93,17 +96,17 @@ func (server *Server) handleWsReadServer(content []byte) {
 		}
 		if err != nil {
 			log.Error(err)
-			reply := socks5.NewReply(socks5.RepHostUnreachable, ipVer, net.IPv4zero, []byte{0, 0})
+			reply := socks5.NewReply(socks5.RepHostUnreachable, msg.Atyp, net.IPv4zero, []byte{0, 0})
 			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Error(err)
 			}
 			return
 		}
-		conn, err := net.Dial("tcp", net.JoinHostPort(dstAddr.String(), dstPort))
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort))
 		if err != nil {
 			log.Error(err)
-			reply := socks5.NewReply(socks5.RepServerFailure, ipVer, net.IPv4zero, []byte{0, 0})
+			reply := socks5.NewReply(socks5.RepServerFailure, msg.Atyp, net.IPv4zero, []byte{0, 0})
 			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Error(err)
@@ -115,19 +118,17 @@ func (server *Server) handleWsReadServer(content []byte) {
 			log.Error(err)
 			return
 		}
-		reply := socks5.NewReply(socks5.RepSuccess, ipVer, addr, port)
+		reply := socks5.NewReply(socks5.RepSuccess, msg.Atyp, addr, port)
 		_, err = wsw.writeReply(*reply)
 		if err != nil {
 			log.Error(err)
 			return
 		}
 
-		server.connPool.set(session, &conn)
-		go server.peer.forward(session)
-
+		server.connPool.set(msg.Session, &conn)
+		go server.peer.forward(msg.Session)
 	default:
-		session := prefix
-		server.receive(session, b[2:])
+		log.WithField("atyp", atyp).Warn("Unknown type message")
 	}
 }
 
