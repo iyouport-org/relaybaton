@@ -9,7 +9,7 @@ type dnsConfig struct {
 	LocalResolve bool   `mapstructure:"local_resolve"`
 }
 
-func (dnsc dnsConfig) Init() error {
+func (dnsc *dnsConfig) Init() error {
 	err := dnsc.validate()
 	if err != nil {
 		log.Error(err)
@@ -18,6 +18,6 @@ func (dnsc dnsConfig) Init() error {
 	return nil
 }
 
-func (dnsc dnsConfig) validate() error {
+func (dnsc *dnsConfig) validate() error {
 	return nil
 }

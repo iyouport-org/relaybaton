@@ -7,7 +7,7 @@ type serverConfig struct {
 	Pretend string `mapstructure:"pretend"`
 }
 
-func (sc serverConfig) Init() error {
+func (sc *serverConfig) Init() error {
 	err := sc.validate()
 	if err != nil {
 		log.Debug(err)
@@ -16,6 +16,6 @@ func (sc serverConfig) Init() error {
 	return nil
 }
 
-func (sc serverConfig) validate() error {
+func (sc *serverConfig) validate() error {
 	return nil
 }

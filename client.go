@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/socks5"
@@ -102,7 +103,7 @@ LOOP:
 				}
 				break LOOP
 			}
-			go client.handleWsReadClient(content, client.wsConn)
+			go client.handleWsReadClient(content)
 		}
 	}
 	err = sl.Close()
@@ -136,24 +137,13 @@ func (client *Client) listenSocks(sl net.Listener) {
 				}
 				return
 			}
-			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
-			wsw := client.getWebsocketWriter(port)
-			err = client.serveSocks5(&s5conn, &wsw)
-			if err != nil {
-				log.Error(err)
-				err = s5conn.Close()
-				if err != nil {
-					log.Error(err)
-				}
-				continue
-			}
-			client.connPool.set(port, &s5conn)
-			go client.peer.forward(port)
+
+			go client.serveSocks5(s5conn)
 		}
 	}
 }
 
-func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn) {
+func (client *Client) handleWsReadClient(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
 	client.mutexWsRead.Unlock()
@@ -230,7 +220,7 @@ func (client *Client) resolve(address string) (atyp byte, addr []byte, port uint
 func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, error) {
 	if request.Atyp == socks5.ATYPDomain && client.conf.DNS.LocalResolve {
 		ips, err := net.LookupIP(string(request.DstAddr[1:]))
-		log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP") //test
+		//log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP") //test
 		if err != nil {
 			log.Debug(err)
 			return nil, err
@@ -238,11 +228,11 @@ func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, er
 		if len(ips) > 0 {
 			for _, ip := range ips {
 				if ip.To4() != nil {
-					log.Debug(ip.To4()) //test
+					//log.Debug(ip.To4()) //test
 					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv4, ip.To4(), request.DstPort), nil
 				}
 				if ip.To16() != nil {
-					log.Debug(ip.To16()) //test
+					//log.Debug(ip.To16()) //test
 					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv6, ip.To16(), request.DstPort), nil
 				}
 			}
@@ -251,11 +241,55 @@ func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, er
 	return request, nil
 }
 
-func (client *Client) serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
+func (client *Client) serveSocks5(s5conn net.Conn) {
+	port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
+	req, err := client.serveSocks5Negotiation(&s5conn)
+	if err != nil {
+		log.Error(err)
+		err = s5conn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		return
+	}
+	if (req.Atyp == socks5.ATYPIPv4 || req.Atyp == socks5.ATYPIPv6) && client.conf.Routing.Match(req.DstAddr) {
+		rawConn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", net.IP(req.DstAddr).String(), binary.BigEndian.Uint16(req.DstPort)))
+		if err != nil {
+			log.Error(err)
+			err = socks5.NewReply(socks5.RepServerFailure, req.Atyp, net.IPv4zero, []byte{0, 0}).WriteTo(s5conn)
+			if err != nil {
+				log.Error(err)
+			}
+			return
+		}
+		err = socks5.NewReply(socks5.RepSuccess, req.Atyp, net.IP{127, 0, 0, 1}, uint16ToBytes(uint16(client.conf.Client.Port))).WriteTo(s5conn)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		go SafeCopy(s5conn, rawConn)
+		go SafeCopy(rawConn, s5conn)
+		return
+	}
+	wsw := client.getWebsocketWriter(port)
+	_, err = wsw.writeConnect(*req)
+	if err != nil {
+		log.Error(err)
+		err = s5conn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		return
+	}
+	client.connPool.set(port, &s5conn)
+	go client.peer.forward(port)
+}
+
+func (client *Client) serveSocks5Negotiation(conn *net.Conn) (*socks5.Request, error) {
 	negotiationRequest, err := socks5.NewNegotiationRequestFrom(*conn)
 	if err != nil {
 		log.Error(err)
-		return err
+		return nil, err
 	}
 	var m byte
 	got := false
@@ -267,35 +301,30 @@ func (client *Client) serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 	if !got {
 		err = errors.New("method not supported")
 		log.Error(err)
-		return err
+		return nil, err
 	}
 	negotiationRely := socks5.NewNegotiationReply(socks5.MethodNone)
 	err = negotiationRely.WriteTo(*conn)
 	if err != nil {
 		log.Error(err)
-		return err
+		return nil, err
 	}
 	request, err := socks5.NewRequestFrom(*conn)
 	if err != nil {
 		log.Error(err)
-		return err
+		return nil, err
 	}
 	if request.Cmd != socks5.CmdConnect {
 		err = errors.New("command not supported")
 		log.Error(err)
-		return err
+		return nil, err
 	}
 	newRequest, err := client.localResolve(request)
 	if err != nil {
 		log.Error(err)
-		return err
+		return nil, err
 	}
-	_, err = wsw.writeConnect(*newRequest)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
+	return newRequest, nil
 }
 
 func buildHeader(conf config.MainConfig) (http.Header, error) {
@@ -351,4 +380,19 @@ func getESNIKey(domain string) (*tls.ESNIKeys, error) {
 		return nil, err
 	}
 	return esniKey, nil
+}
+
+func SafeCopy(conn1 net.Conn, conn2 net.Conn) {
+	_, err := io.Copy(conn1, conn2)
+	if err != nil {
+		log.Error(err)
+		err = conn1.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		err = conn2.Close()
+		if err != nil {
+			log.Error(err)
+		}
+	}
 }

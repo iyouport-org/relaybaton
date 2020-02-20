@@ -31,7 +31,7 @@ type dbConfig struct {
 	DB         *gorm.DB
 }
 
-func (dbc dbConfig) Init() error {
+func (dbc *dbConfig) Init() error {
 	err := dbc.validate()
 	if err != nil {
 		log.Error(err)
@@ -45,11 +45,11 @@ func (dbc dbConfig) Init() error {
 	return nil
 }
 
-func (dbc dbConfig) validate() error {
+func (dbc *dbConfig) validate() error {
 	return nil
 }
 
-func (dbc dbConfig) getDB() (*gorm.DB, error) {
+func (dbc *dbConfig) getDB() (*gorm.DB, error) {
 	var connStr string
 	switch dbc.TypeString {
 	case "mysql":

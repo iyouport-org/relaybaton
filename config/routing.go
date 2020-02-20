@@ -44,7 +44,7 @@ type routingConfig struct {
 	SkipCountry     gountries.Country
 }
 
-func (rc routingConfig) Init() error {
+func (rc *routingConfig) Init() error {
 	err := rc.validate()
 	if err != nil {
 		log.Error(err)
@@ -60,7 +60,7 @@ func (rc routingConfig) Init() error {
 	return nil
 }
 
-func (rc routingConfig) validate() error {
+func (rc *routingConfig) validate() error {
 	err := routingType(rc.TypeString).validate()
 	if err != nil {
 		log.WithField("routing.type", rc.TypeString).Error(err)
@@ -80,12 +80,11 @@ func (rc routingConfig) validate() error {
 	return nil
 }
 
-func (rc routingConfig) Match(ipAddress net.IP) bool {
-	//TODO
+func (rc *routingConfig) Match(ipAddress net.IP) bool {
 	return rc.GeoIPMatch(ipAddress)
 }
 
-func (rc routingConfig) GeoIPMatch(ipAddress net.IP) bool {
+func (rc *routingConfig) GeoIPMatch(ipAddress net.IP) bool {
 	record, err := rc.DB.Country(ipAddress)
 	if err != nil {
 		log.WithField("IP", ipAddress.String()).Error(err)

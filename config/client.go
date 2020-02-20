@@ -9,7 +9,7 @@ type clientConfig struct {
 	Password string `mapstructure:"password"`
 }
 
-func (cc clientConfig) Init() error {
+func (cc *clientConfig) Init() error {
 	err := cc.validate()
 	if err != nil {
 		log.Error(err)
@@ -18,6 +18,6 @@ func (cc clientConfig) Init() error {
 	return nil
 }
 
-func (cc clientConfig) validate() error {
+func (cc *clientConfig) validate() error {
 	return nil
 }

@@ -145,12 +145,6 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.db = handler.Conf.DB.DB
-	if err != nil {
-		log.Error(err)
-		handler.redirect(&w, r)
-		return
-	}
-
 	err = handler.authenticate(r.Header)
 	if err != nil {
 		log.Error(err)

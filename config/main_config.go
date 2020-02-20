@@ -16,7 +16,7 @@ type MainConfig struct {
 	LogFileFile   *os.File
 }
 
-func (mc MainConfig) Init() (err error) {
+func (mc *MainConfig) Init() (err error) {
 	err = mc.validate()
 	if err != nil {
 		log.Error(err)
@@ -55,7 +55,7 @@ func (mc MainConfig) Init() (err error) {
 	return nil
 }
 
-func (mc MainConfig) validate() (err error) {
+func (mc *MainConfig) validate() (err error) {
 	_, err = os.Stat(mc.LogFileString)
 	if err != nil && !os.IsNotExist(err) {
 		log.Error(err)
