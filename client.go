@@ -11,9 +11,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/gorilla/websocket"
+	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/http"
@@ -28,7 +30,7 @@ type Client struct {
 }
 
 // NewClient creates a new client using the given config.
-func NewClient(conf Config) (*Client, error) {
+func NewClient(conf config.MainConfig) (*Client, error) {
 	var err error
 	client := &Client{}
 	client.init(conf)
@@ -111,49 +113,12 @@ LOOP:
 
 // Dial to the given address from the client and return the connection
 func (client *Client) Dial(address string) (net.Conn, error) {
-	rawConn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
+	dialer, err := proxy.SOCKS5("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port), nil, nil)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	negotiationRequest := socks5.NewNegotiationRequest([]byte{socks5.MethodNone})
-	err = negotiationRequest.WriteTo(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	negotiationReply, err := socks5.NewNegotiationReplyFrom(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	if negotiationReply.Method != socks5.MethodNone {
-		err = errors.New("unsupported method")
-		log.Error(err)
-		return nil, err
-	}
-	atyp, addr, port, err := client.resolve(address)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	request := socks5.NewRequest(socks5.CmdConnect, atyp, addr, uint16ToBytes(port))
-	err = request.WriteTo(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	reply, err := socks5.NewReplyFrom(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	if reply.Rep != socks5.RepSuccess {
-		err = errors.New("request fail")
-		log.WithField("code", reply.Rep).Error(err)
-		return nil, err
-	}
-	return rawConn, nil
+	return dialer.Dial("tcp", address)
 }
 
 func (client *Client) listenSocks(sl net.Listener) {
@@ -333,7 +298,7 @@ func (client *Client) serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
 	return nil
 }
 
-func buildHeader(conf Config) (http.Header, error) {
+func buildHeader(conf config.MainConfig) (http.Header, error) {
 	header := http.Header{}
 	nonce := make([]byte, 12)
 	_, err := io.ReadFull(rand.Reader, nonce)

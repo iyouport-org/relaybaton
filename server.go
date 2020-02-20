@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/socks5"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
@@ -30,7 +31,7 @@ type Server struct {
 }
 
 // NewServer creates a new server using the given config and websocket connection.
-func NewServer(conf Config, wsConn *websocket.Conn) *Server {
+func NewServer(conf config.MainConfig, wsConn *websocket.Conn) *Server {
 	server := &Server{}
 	server.init(conf)
 	server.wsConn = wsConn
@@ -132,7 +133,7 @@ func (server *Server) handleWsReadServer(content []byte) {
 
 // Handler pass config to ServeHTTP()
 type Handler struct {
-	Conf Config
+	Conf config.MainConfig
 	db   *gorm.DB
 }
 
@@ -143,7 +144,7 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		EnableCompression: true,
 	}
 
-	handler.db, err = handler.Conf.DB.getDB()
+	handler.db = handler.Conf.DB.DB
 	if err != nil {
 		log.Error(err)
 		handler.redirect(&w, r)

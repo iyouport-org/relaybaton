@@ -3,6 +3,7 @@ package relaybaton
 import (
 	"encoding/binary"
 	"github.com/gorilla/websocket"
+	"github.com/iyouport-org/relaybaton/config"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"sync"
@@ -16,10 +17,10 @@ type peer struct {
 	hasMessage   chan byte
 	close        chan byte
 	wsConn       *websocket.Conn
-	conf         Config
+	conf         config.MainConfig
 }
 
-func (peer *peer) init(conf Config) {
+func (peer *peer) init(conf config.MainConfig) {
 	peer.hasMessage = make(chan byte, 2^32+2^16)
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
@@ -119,9 +120,18 @@ func (peer *peer) processQueue() {
 }
 
 func (peer *peer) Close() error {
+	if len(peer.close) > 0 {
+		return nil
+	}
 	log.Debug("closing peer")
 	peer.close <- 0
+	peer.close <- 1
+	peer.close <- 2
 	err := peer.wsConn.Close()
+	if err != nil {
+		log.Debug(err)
+	}
+	err = peer.conf.DB.DB.Close()
 	if err != nil {
 		log.Debug(err)
 	}
@@ -131,7 +141,6 @@ func (peer *peer) Close() error {
 			peer.connPool.delete(i)
 		}
 	}
-	peer.close <- 2
 	return err
 }
 

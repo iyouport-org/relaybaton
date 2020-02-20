@@ -16,6 +16,11 @@ server="cloudflare-dns.com"
 addr="1.0.0.1:853"
 local_resolve=true
 
+[routing]
+type="geoip"
+file="GeoLite2-Country.mmdb"
+skip="CN"
+
 [db]
 type="sqlite3" #sqlite3, mysql, postgresql, sqlserver
 username="root"

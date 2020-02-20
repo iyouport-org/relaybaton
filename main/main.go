@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/iyouport-org/relaybaton"
+	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/relaybaton/dns"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -24,16 +25,18 @@ func main() {
 		log.Error(err)
 		return
 	}
-	var conf relaybaton.Config
-	if err := v.Unmarshal(&conf); err != nil {
+	var conf config.MainConfig
+	err = v.Unmarshal(&conf)
+	if err != nil {
 		log.Error(err)
 		return
 	}
-	file, err := os.OpenFile(conf.LogFile, os.O_CREATE|os.O_WRONLY, 0644)
+	err = conf.Init()
 	if err != nil {
 		log.Error(err)
+		return
 	}
-	log.SetOutput(file)
+	log.SetOutput(conf.LogFileFile)
 	log.SetLevel(log.TraceLevel)
 	log.SetFormatter(relaybaton.XMLFormatter{})
 	log.SetReportCaller(true)
