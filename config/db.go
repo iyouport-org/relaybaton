@@ -14,7 +14,6 @@ import (
 type dbType string
 
 const (
-	DBTypeDefault    dbType = "default"
 	DBTypeMySQL      dbType = "mysql"
 	DBTypePostgreSQL dbType = "postgresql"
 	DBTypeSQLite3    dbType = "sqlite3"

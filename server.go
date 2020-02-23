@@ -148,7 +148,16 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.db = handler.Conf.DB.DB
 	err = handler.authenticate(r.Header)
 	if err != nil {
-		log.Error(err)
+		fields := log.Fields{}
+		for k, v := range r.Header {
+			fields["request.header."+k] = v
+		}
+		respBody, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Error(err)
+		}
+		fields["request.body"] = string(respBody)
+		log.WithFields(fields).Error(err)
 		handler.redirect(&w, r)
 		return
 	}
@@ -173,7 +182,7 @@ func (handler Handler) authenticate(header http.Header) error {
 	token := header.Get("token")
 	data, err := hex.DecodeString(token)
 	if err != nil {
-		log.Error(err)
+		log.WithField("token", token).Error(err)
 		return err
 	}
 	if len(data) < 12 {

@@ -80,6 +80,10 @@ func main() {
 		handler := relaybaton.Handler{
 			Conf: conf,
 		}
-		log.Error(http.ListenAndServe(fmt.Sprintf(":%d", conf.Server.Port), handler))
+		if conf.Server.Secure {
+			log.Error(http.ListenAndServeTLS(fmt.Sprintf(":%d", conf.Server.Port), confTOML.Server.CertFile, confTOML.Server.KeyFile, handler))
+		} else {
+			log.Error(http.ListenAndServe(fmt.Sprintf(":%d", conf.Server.Port), handler))
+		}
 	}
 }

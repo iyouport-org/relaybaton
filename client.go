@@ -20,6 +20,7 @@ import (
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/net/proxy"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -63,10 +64,23 @@ func NewClient(conf *config.ConfigGo) (*Client, error) {
 		log.Error(err)
 		return nil, err
 	}
-
-	client.wsConn, _, err = dialer.Dial(u.String(), header)
+	var resp *http.Response
+	client.wsConn, resp, err = dialer.Dial(u.String(), header)
 	if err != nil {
-		log.Error(err)
+		fields := log.Fields{
+			"url": u.String(),
+		}
+		if resp != nil {
+			for k, v := range resp.Header {
+				fields["response.header."+k] = v
+			}
+			respBody, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Error(err)
+			}
+			fields["response.body"] = string(respBody)
+		}
+		log.WithFields(fields).Error(err)
 		return nil, err
 	}
 	client.wsConn.EnableWriteCompression(true)
