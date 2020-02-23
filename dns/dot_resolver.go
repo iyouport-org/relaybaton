@@ -10,10 +10,10 @@ import (
 type DoTResolverFactory struct {
 	dialer    net.Dialer
 	tlsConfig tls.Config
-	addr      string
+	addr      net.Addr
 }
 
-func NewDoTResolverFactory(dialer net.Dialer, serverName string, addr string, insecureSkipVerify bool) DoTResolverFactory {
+func NewDoTResolverFactory(dialer net.Dialer, serverName string, addr net.Addr, insecureSkipVerify bool) DoTResolverFactory {
 	return DoTResolverFactory{
 		dialer: dialer,
 		tlsConfig: tls.Config{
@@ -34,7 +34,7 @@ func (factory DoTResolverFactory) GetResolver() *net.Resolver {
 
 func (factory DoTResolverFactory) getDialFunction() func(ctx context.Context, network, address string) (net.Conn, error) {
 	return func(context context.Context, _, address string) (net.Conn, error) {
-		conn, err := factory.dialer.DialContext(context, "tcp", factory.addr)
+		conn, err := factory.dialer.DialContext(context, "tcp", factory.addr.String())
 		if err != nil {
 			log.Error(err)
 			if conn != nil {

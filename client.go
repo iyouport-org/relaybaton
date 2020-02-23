@@ -33,7 +33,7 @@ type Client struct {
 }
 
 // NewClient creates a new client using the given config.
-func NewClient(conf config.MainConfig) (*Client, error) {
+func NewClient(conf *config.ConfigGo) (*Client, error) {
 	var err error
 	client := &Client{}
 	client.init(conf)
@@ -81,7 +81,7 @@ func NewClient(conf config.MainConfig) (*Client, error) {
 
 // Run start a client
 func (client *Client) Run() {
-	sl, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
+	sl, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", client.conf.Client.Port))
 	if err != nil {
 		log.Error(err)
 		return
@@ -116,7 +116,7 @@ LOOP:
 
 // Dial to the given address from the client and return the connection
 func (client *Client) Dial(address string) (net.Conn, error) {
-	dialer, err := proxy.SOCKS5("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port), nil, nil)
+	dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", client.conf.Client.Port), nil, nil)
 	if err != nil {
 		log.Error(err)
 		return nil, err
@@ -321,7 +321,7 @@ func (client *Client) serveSocks5Negotiation(conn *net.Conn) (*socks5.Request, e
 	return newRequest, nil
 }
 
-func buildHeader(conf config.MainConfig) (http.Header, error) {
+func buildHeader(conf *config.ConfigGo) (http.Header, error) {
 	header := http.Header{}
 	nonce := make([]byte, 12)
 	_, err := io.ReadFull(rand.Reader, nonce)

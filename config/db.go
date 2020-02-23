@@ -14,72 +14,63 @@ import (
 type dbType string
 
 const (
+	DBTypeDefault    dbType = "default"
 	DBTypeMySQL      dbType = "mysql"
 	DBTypePostgreSQL dbType = "postgresql"
 	DBTypeSQLite3    dbType = "sqlite3"
 	DBTypeSQLServer  dbType = "sqlserver"
 )
 
-type dbConfig struct {
-	TypeString string `mapstructure:"type"`
-	Username   string `mapstructure:"username"`
-	Password   string `mapstructure:"password"`
-	Host       string `mapstructure:"host"`
-	Port       int    `mapstructure:"port"`
-	Database   string `mapstructure:"database"`
-	Type       dbType
-	DB         *gorm.DB
+type dbTOML struct {
+	Type     string `mapstructure:"type"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Database string `mapstructure:"database"`
 }
 
-func (dbc *dbConfig) Init() error {
-	err := dbc.validate()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	dbc.DB, err = dbc.getDB()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
+type dbGo struct {
+	Type dbType
+	DB   *gorm.DB
 }
 
-func (dbc *dbConfig) validate() error {
-	return nil
-}
-
-func (dbc *dbConfig) getDB() (*gorm.DB, error) {
+func (dbt *dbTOML) Init() (dbg *dbGo, err error) {
+	dbg = &dbGo{}
 	var connStr string
-	switch dbc.TypeString {
+	switch dbt.Type {
 	case "mysql":
-		connStr = fmt.Sprintf("%s:%s@(%s)/%s?charset=utf8&parseTime=True&loc=Local", dbc.Username, dbc.Password, dbc.Host, dbc.Database)
+		connStr = fmt.Sprintf("%s:%s@(%s)/%s?charset=utf8&parseTime=True&loc=Local", dbt.Username, dbt.Password, dbt.Host, dbt.Database)
+		dbg.Type = DBTypeMySQL
 	case "postgresql":
-		connStr = fmt.Sprintf("host=%s port=%d User=%s dbname=%s password=%s", dbc.Host, dbc.Port, dbc.Username, dbc.Database, dbc.Password)
+		connStr = fmt.Sprintf("host=%s port=%d User=%s dbname=%s password=%s", dbt.Host, dbt.Port, dbt.Username, dbt.Database, dbt.Password)
+		dbg.Type = DBTypePostgreSQL
 	case "sqlite3":
-		connStr = dbc.Database
+		connStr = dbt.Database
+		dbg.Type = DBTypeSQLite3
 	case "sqlserver":
-		connStr = fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", dbc.Username, dbc.Password, dbc.Host, dbc.Port, dbc.Database)
+		connStr = fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", dbt.Username, dbt.Password, dbt.Host, dbt.Port, dbt.Database)
+		dbg.Type = DBTypeSQLServer
 	default:
-		err := errors.New("unknown database dialect")
-		log.WithField("dialect", dbc.TypeString).Debug(err)
+		err = errors.New("unknown DB Type: " + dbt.Type)
+		log.WithField("db.type", dbt.Type).Error(err)
 		return nil, err
 	}
-	db, err := gorm.Open(dbc.TypeString, connStr)
+	dbg.DB, err = gorm.Open(dbt.Type, connStr)
 	if err != nil {
 		log.WithFields(log.Fields{
-			"dialect":           dbc.TypeString,
+			"db.type":           dbt.Type,
 			"connection string": connStr,
 		}).Error(err)
 		return nil, err
 	}
-	if db == nil {
+	if dbg.DB == nil {
 		err = errors.New("failed to connect to database")
 		log.WithFields(log.Fields{
-			"dialect":           dbc.TypeString,
+			"db.type":           dbt.Type,
 			"connection string": connStr,
 		}).Error(err)
 		return nil, err
 	}
-	return db, err
+	return dbg, err
 }

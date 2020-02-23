@@ -1,4 +1,6 @@
-log_file="./log.xml"
+[log]
+file="./log.xml"
+level="error"
 
 [client]
 server="example.com"
@@ -8,7 +10,7 @@ password="password"
 
 [server]
 port=80
-pretend="www.kernel.org"
+pretend="https://www.kernel.org"
 
 [dns]
 type="dot"

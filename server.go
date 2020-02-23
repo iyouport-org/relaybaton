@@ -31,7 +31,7 @@ type Server struct {
 }
 
 // NewServer creates a new server using the given config and websocket connection.
-func NewServer(conf config.MainConfig, wsConn *websocket.Conn) *Server {
+func NewServer(conf *config.ConfigGo, wsConn *websocket.Conn) *Server {
 	server := &Server{}
 	server.init(conf)
 	server.wsConn = wsConn
@@ -134,7 +134,7 @@ func (server *Server) handleWsRead(content []byte) {
 
 // Handler pass config to ServeHTTP()
 type Handler struct {
-	Conf config.MainConfig
+	Conf *config.ConfigGo
 	db   *gorm.DB
 }
 
@@ -274,7 +274,7 @@ func (handler Handler) saveNonce(username string, nonce []byte) error {
 }
 
 func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
-	newReq, err := http.NewRequest(r.Method, "https://"+handler.Conf.Server.Pretend+r.RequestURI, r.Body)
+	newReq, err := http.NewRequest(r.Method, handler.Conf.Server.Pretend.String()+r.RequestURI, r.Body)
 	if err != nil {
 		log.Error(err)
 		return

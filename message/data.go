@@ -17,6 +17,7 @@ func NewDataMessage(session uint16, data []byte) DataMessage {
 		Atyp:    2,
 		Session: session,
 		Data:    data,
+		Length:  3 + len(data),
 	}
 }
 

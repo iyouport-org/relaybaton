@@ -1,21 +1,28 @@
 package config
 
-import log "github.com/sirupsen/logrus"
+import (
+	log "github.com/sirupsen/logrus"
+	"net/url"
+)
 
-type serverConfig struct {
+type serverTOML struct {
 	Port    int    `mapstructure:"port"`
 	Pretend string `mapstructure:"pretend"`
 }
 
-func (sc *serverConfig) Init() error {
-	err := sc.validate()
-	if err != nil {
-		log.Debug(err)
-		return err
-	}
-	return nil
+type serverGo struct {
+	Port    uint16
+	Pretend *url.URL
 }
 
-func (sc *serverConfig) validate() error {
-	return nil
+func (st *serverTOML) Init() (sg *serverGo, err error) {
+	sg = &serverGo{
+		Port: uint16(st.Port),
+	}
+	sg.Pretend, err = url.Parse(st.Pretend)
+	if err != nil {
+		log.WithField("server.pretend", st.Pretend).Error(err)
+		return nil, err
+	}
+	return sg, nil
 }

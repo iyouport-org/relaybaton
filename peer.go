@@ -17,10 +17,10 @@ type peer struct {
 	hasMessage   chan byte
 	close        chan byte
 	wsConn       *websocket.Conn
-	conf         config.MainConfig
+	conf         *config.ConfigGo
 }
 
-func (peer *peer) init(conf config.MainConfig) {
+func (peer *peer) init(conf *config.ConfigGo) {
 	peer.hasMessage = make(chan byte, 2^32+2^16)
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
@@ -129,10 +129,6 @@ func (peer *peer) Close() error {
 	peer.close <- 1
 	peer.close <- 2
 	err := peer.wsConn.Close()
-	if err != nil {
-		log.Debug(err)
-	}
-	err = peer.conf.DB.DB.Close()
 	if err != nil {
 		log.Debug(err)
 	}

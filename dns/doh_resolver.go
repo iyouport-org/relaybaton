@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
@@ -17,29 +16,23 @@ import (
 type DoHResolverFactory struct {
 	dialer       net.Dialer
 	port         uint16
-	ip           net.IP
+	addr         net.Addr
 	url          url.URL
 	strictErrors bool
 	server       dns.Server
 	client       http.Client
 }
 
-func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ipStr string, strictErrors bool) (*DoHResolverFactory, error) {
+func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, addr net.Addr, strictErrors bool) (*DoHResolverFactory, error) {
 	u, err := url.ParseRequestURI("https://" + serverName + "/dns-query")
 	if err != nil {
-		return nil, err
-	}
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		err = errors.New("IP parse error")
-		log.Error(err)
 		return nil, err
 	}
 	factory := &DoHResolverFactory{
 		dialer:       dialer,
 		port:         port,
 		url:          *u,
-		ip:           ip,
+		addr:         addr,
 		strictErrors: strictErrors,
 		server: dns.Server{
 			Addr: fmt.Sprintf(":%d", port),
@@ -48,8 +41,8 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ip
 		client: http.Client{
 			Transport: &http.Transport{
 				Proxy: nil,
-				DialTLS: func(network, addr string) (net.Conn, error) {
-					return tls.Dial("tcp", ip.String()+":443", &tls.Config{
+				DialTLS: func(_, _ string) (net.Conn, error) {
+					return tls.Dial("tcp", addr.String()+":443", &tls.Config{
 						ServerName: u.Hostname(),
 					})
 				},
@@ -58,7 +51,12 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ip
 		},
 	}
 
-	go factory.server.ListenAndServe()
+	go func() {
+		err = factory.server.ListenAndServe()
+		if err != nil {
+			log.Error()
+		}
+	}()
 	dns.HandleFunc(".", factory.handleRequest)
 	return factory, nil
 }

@@ -1,23 +1,24 @@
 package config
 
-import log "github.com/sirupsen/logrus"
-
-type clientConfig struct {
+type clientTOML struct {
 	Server   string `mapstructure:"server"`
 	Port     int    `mapstructure:"port"`
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
 }
 
-func (cc *clientConfig) Init() error {
-	err := cc.validate()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
+type clientGo struct {
+	Server   string
+	Port     uint16
+	Username string
+	Password string
 }
 
-func (cc *clientConfig) validate() error {
-	return nil
+func (ct *clientTOML) Init() (cg *clientGo, err error) {
+	return &clientGo{
+		Server:   ct.Server,
+		Port:     uint16(ct.Port),
+		Username: ct.Username,
+		Password: ct.Password,
+	}, nil
 }

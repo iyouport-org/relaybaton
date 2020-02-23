@@ -15,6 +15,7 @@ func NewDeleteMessage(session uint16) DeleteMessage {
 	return DeleteMessage{
 		Atyp:    0,
 		Session: session,
+		Length:  3,
 	}
 }
 

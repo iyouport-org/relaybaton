@@ -2,86 +2,71 @@ package config
 
 import (
 	log "github.com/sirupsen/logrus"
-	"os"
 )
 
-// MainConfig is the struct mapped from the configuration file
-type MainConfig struct {
-	LogFileString string        `mapstructure:"log_file"`
-	Client        clientConfig  `mapstructure:"client"`
-	Server        serverConfig  `mapstructure:"server"`
-	DNS           dnsConfig     `mapstructure:"dns"`
-	Routing       routingConfig `mapstructure:"routing"`
-	DB            dbConfig      `mapstructure:"db"`
-	LogFileFile   *os.File
+// ConfigTOML is the struct mapped from the configuration file
+type ConfigTOML struct {
+	Log     logTOML     `mapstructure:"log"`
+	Client  clientTOML  `mapstructure:"client"`
+	Server  serverTOML  `mapstructure:"server"`
+	DNS     dnsTOML     `mapstructure:"dns"`
+	Routing routingTOML `mapstructure:"routing"`
+	DB      dbTOML      `mapstructure:"db"`
 }
 
-func (mc *MainConfig) Init() (err error) {
-	err = mc.validate()
+type ConfigGo struct {
+	Log     *logGo     //client,server
+	Client  *clientGo  //client
+	Server  *serverGo  //server
+	DNS     *dnsGo     //client,server
+	Routing *routingGo //client
+	DB      *dbGo      //server
+}
+
+func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
+	cg = &ConfigGo{}
+	cg.Log, err = mc.Log.Init()
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	cg.DNS, err = mc.DNS.Init()
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	return cg, nil
+}
+
+func (mc *ConfigTOML) InitClient(cg *ConfigGo) error {
+	var err error
+	cg.Client, err = mc.Client.Init()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	err = mc.Client.Init()
+	cg.Routing, err = mc.Routing.Init()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	err = mc.Server.Init()
-	if err != nil {
-		log.Error(err)
-		return err
+	if cg.Routing.Type != RoutingTypeDefault && !cg.DNS.LocalResolve {
+		log.Warn("dns.local_resolve should be set true for routing")
 	}
-	err = mc.DNS.Init()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	err = mc.Routing.Init()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	err = mc.DB.Init()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	mc.LogFileFile, err = os.OpenFile(mc.LogFileString, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Error(err)
-		return err
+	if cg.Routing.Type != RoutingTypeDefault && cg.DNS.Type == DNSTypeDefault {
+		log.Warn("Secure DNS should be set for routing")
 	}
 	return nil
 }
 
-func (mc *MainConfig) validate() (err error) {
-	_, err = os.Stat(mc.LogFileString)
-	if err != nil && !os.IsNotExist(err) {
-		log.Error(err)
-		return err
-	}
-	err = mc.Client.validate()
+func (mc *ConfigTOML) InitServer(cg *ConfigGo) error {
+	var err error
+	cg.Server, err = mc.Server.Init()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	err = mc.Server.validate()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	err = mc.DNS.validate()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	err = mc.Routing.validate()
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	err = mc.DB.validate()
+	cg.DB, err = mc.DB.Init()
 	if err != nil {
 		log.Error(err)
 		return err
