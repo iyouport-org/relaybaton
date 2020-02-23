@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/relaybaton/message"
+	"github.com/iyouport-org/relaybaton/util"
 	"github.com/iyouport-org/socks5"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
@@ -53,7 +54,7 @@ func (server *Server) Run() {
 				log.Error(err)
 				err = server.Close()
 				if err != nil {
-					log.Error(err)
+					log.Warn(err)
 				}
 				return
 			}
@@ -67,10 +68,11 @@ func (server *Server) handleWsRead(content []byte) {
 	copy(b, content)
 	server.mutexWsRead.Unlock()
 	atyp := b[0]
-	/*session := binary.BigEndian.Uint16(b[1:3])
-	if server.connPool.isCloseSent(session) {	//test
+	session := binary.BigEndian.Uint16(b[1:3])
+	if server.connPool.isCloseSent(session) { //test
+		log.WithField("session", session).Debug("Deleted websocket read")
 		return
-	}*/
+	}
 	switch atyp {
 	case 0: //delete
 		msg := message.UnpackDelete(b)
@@ -91,37 +93,46 @@ func (server *Server) handleWsRead(content []byte) {
 			if len(dstAddrs) > 0 {
 				dstAddr = dstAddrs[0]
 			} else {
-				err = errors.New(fmt.Sprintf("cannot lookup IP for: %s", string(b[7:])))
+				err = errors.New("cannot resolve domain name")
 			}
 		}
-		if err != nil {
-			log.Error(err)
+		if err != nil || dstAddr == nil {
+			log.WithField("addr", string(b[7:])).Warn(err)
 			reply := socks5.NewReply(socks5.RepHostUnreachable, msg.Atyp, net.IPv4zero, []byte{0, 0})
 			_, err = wsw.writeReply(*reply)
 			if err != nil {
-				log.Error(err)
+				log.Warn(err)
 			}
 			return
 		}
-		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort))
+		var conn net.Conn
+		if dstAddr.To4() != nil { //IPv4
+			conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort))
+		} else { //IPv6
+			conn, err = net.Dial("tcp", fmt.Sprintf("[%s]:%d", dstAddr.String(), msg.DstPort))
+		}
 		if err != nil {
-			log.Error(err)
+			log.WithField("addr", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort)).Error(err)
 			reply := socks5.NewReply(socks5.RepServerFailure, msg.Atyp, net.IPv4zero, []byte{0, 0})
 			_, err = wsw.writeReply(*reply)
 			if err != nil {
-				log.Error(err)
+				log.Warn(err)
 			}
 			return
 		}
 		_, addr, port, err := socks5.ParseAddress(conn.LocalAddr().String())
 		if err != nil {
-			log.Error(err)
+			log.WithField("addr", conn.LocalAddr().String()).Error(err)
 			return
 		}
 		reply := socks5.NewReply(socks5.RepSuccess, msg.Atyp, addr, port)
 		_, err = wsw.writeReply(*reply)
 		if err != nil {
-			log.Error(err)
+			log.WithFields(log.Fields{
+				"atyp": msg.Atyp,
+				"addr": addr,
+				"port": port,
+			}).Warn(err)
 			return
 		}
 
@@ -141,29 +152,17 @@ type Handler struct {
 // ServerHTTP accept incoming HTTP request, establish websocket connections, and a new server for handling the connection. If authentication failed, the request will be redirected to the website set in the configuration file.
 func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
+	var wsConn *websocket.Conn
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 	}
-
 	handler.db = handler.Conf.DB.DB
 	err = handler.authenticate(r.Header)
-	if err != nil {
-		fields := log.Fields{}
-		for k, v := range r.Header {
-			fields["request.header."+k] = v
-		}
-		respBody, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Error(err)
-		}
-		fields["request.body"] = string(respBody)
-		log.WithFields(fields).Error(err)
-		handler.redirect(&w, r)
-		return
+	if err == nil {
+		wsConn, err = upgrader.Upgrade(w, r, nil)
 	}
-	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(util.Header2Fields(r.Header, r.Body)).Error(err)
 		handler.redirect(&w, r)
 		return
 	}
@@ -193,24 +192,27 @@ func (handler Handler) authenticate(header http.Header) error {
 	nonce, cipherText := data[:12], data[12:]
 	nonceUsed, err := handler.nonceUsed(username, nonce)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(log.Fields{
+			"username": username,
+			"nonce":    nonce,
+		}).Error(err)
 		return err
 	}
 	if nonceUsed {
 		err = errors.New("authentication failed in nonce verification")
-		log.Error(err)
+		log.WithField("nonce", nonce).Error(err)
 		return err
 	}
 
 	password, err := handler.getPassword(username)
 	if err != nil {
-		log.Error(err)
+		log.WithField("username", username).Error(err)
 		return err
 	}
 	key := argon2.Key([]byte(password), nonce, 3, 32*1024, 4, 32)
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		log.Error(err)
+		log.WithField("key", key).Error(err)
 		return err
 	}
 
@@ -222,23 +224,27 @@ func (handler Handler) authenticate(header http.Header) error {
 
 	plaintext, err := aesgcm.Open(nil, nonce, cipherText, nil)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(log.Fields{
+			"nonce":      nonce,
+			"cipherText": cipherText,
+		}).Error(err)
 		return err
 	}
 
 	t := int64(binary.BigEndian.Uint64(plaintext))
 	if time.Since(time.Unix(t/1000000000, t%1000000000)).Seconds() > 60 {
 		err = errors.New("authentication failed in time verification")
-		log.Error(err)
+		log.WithField("timestamp", t).Error(err)
 		return err
 	}
-
 	err = handler.saveNonce(username, nonce)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(log.Fields{
+			"username": username,
+			"nonce":    nonce,
+		}).Error(err)
 		return err
 	}
-
 	return nil
 }
 
@@ -248,6 +254,7 @@ func (handler Handler) getPassword(username string) (string, error) {
 	var user User
 	err := db.Where("username = ?", username).First(&user).Error
 	if err != nil {
+		log.WithField("username", username).Error(err)
 		return "", err
 	}
 	return user.Password, nil
@@ -263,6 +270,10 @@ func (handler Handler) nonceUsed(username string, nonce []byte) (bool, error) {
 	}
 	err := db.Error
 	if err != nil {
+		log.WithFields(log.Fields{
+			"username": username,
+			"nonce":    nonce,
+		}).Error(err)
 		return true, err
 	}
 	return true, nil
@@ -277,6 +288,10 @@ func (handler Handler) saveNonce(username string, nonce []byte) error {
 	}
 	err := db.Create(newNonce).Error
 	if err != nil {
+		log.WithFields(log.Fields{
+			"username": username,
+			"nonce":    nonce,
+		}).Error(err)
 		return err
 	}
 	return nil
@@ -285,7 +300,7 @@ func (handler Handler) saveNonce(username string, nonce []byte) error {
 func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
 	newReq, err := http.NewRequest(r.Method, handler.Conf.Server.Pretend.String()+r.RequestURI, r.Body)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(util.Header2Fields(r.Header, r.Body)).Error(err)
 		return
 	}
 	for k, v := range r.Header {
@@ -293,7 +308,7 @@ func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := http.DefaultClient.Do(newReq)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(util.Header2Fields(newReq.Header, newReq.Body)).Error(err)
 		return
 	}
 	for k, v := range resp.Header {
@@ -301,17 +316,16 @@ func (handler Handler) redirect(w *http.ResponseWriter, r *http.Request) {
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(util.Header2Fields(resp.Header, resp.Body)).Error(err)
 		return
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		log.Error(err)
-		return
+		log.Warn(err)
 	}
 	_, err = (*w).Write(body)
 	if err != nil {
-		log.Error(err)
+		log.WithField("body", body).Warn(err)
 		return
 	}
 }

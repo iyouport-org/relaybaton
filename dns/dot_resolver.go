@@ -40,7 +40,7 @@ func (factory DoTResolverFactory) getDialFunction() func(ctx context.Context, ne
 			if conn != nil {
 				err = conn.Close()
 				if err != nil {
-					log.Error(err)
+					log.Warn(err)
 				}
 			}
 			return nil, err

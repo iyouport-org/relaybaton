@@ -25,7 +25,8 @@ func (wsw webSocketWriter) Write(b []byte) (n int, err error) {
 	msg := message.NewDataMessage(wsw.session, b)
 	pMsg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, msg.Pack())
 	if err != nil {
-		log.Error(err)
+		log.WithField("msg", msg.Pack()).Error(err)
+		return 0, err
 	}
 	wsw.peer.messageQueue <- pMsg
 	wsw.peer.hasMessage <- byte(1)
@@ -40,7 +41,8 @@ func (wsw webSocketWriter) writeClose() (n int, err error) {
 	msg := message.NewDeleteMessage(wsw.session)
 	pMsg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, msg.Pack())
 	if err != nil {
-		log.Error(err)
+		log.WithField("msg", msg.Pack()).Error(err)
+		return 0, err
 	}
 	wsw.peer.controlQueue <- pMsg
 	wsw.peer.hasMessage <- byte(1)
@@ -56,7 +58,8 @@ func (wsw webSocketWriter) writeConnect(request socks5.Request) (n int, err erro
 	}
 	pMsg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, msg.Pack())
 	if err != nil {
-		log.Error(err)
+		log.WithField("msg", msg.Pack()).Error(err)
+		return 0, err
 	}
 	wsw.peer.controlQueue <- pMsg
 	wsw.peer.hasMessage <- byte(1)
@@ -73,7 +76,8 @@ func (wsw webSocketWriter) writeReply(reply socks5.Reply) (n int, err error) {
 	}
 	pMsg, err := websocket.NewPreparedMessage(websocket.BinaryMessage, msg.Pack())
 	if err != nil {
-		log.Error(err)
+		log.WithField("msg", msg.Pack()).Error(err)
+		return 0, err
 	}
 	wsw.peer.controlQueue <- pMsg
 	wsw.peer.hasMessage <- byte(1)

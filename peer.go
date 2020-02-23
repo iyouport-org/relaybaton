@@ -34,7 +34,7 @@ func (peer *peer) forward(session uint16) {
 	conn := peer.connPool.get(session)
 	_, err := io.Copy(wsw, *conn)
 	if err != nil {
-		log.Error(err)
+		log.WithField("session", session).Trace(err)
 	}
 	peer.connPool.delete(session)
 	_, err = wsw.writeClose()
@@ -53,17 +53,17 @@ func (peer *peer) receive(msg message.DataMessage) {
 		log.WithField("session", msg.Session).Debug("deleted connection read")
 		_, err := wsw.writeClose()
 		if err != nil {
-			log.Error(err)
+			log.Warn(err)
 		}
 		return
 	}
 	_, err := (*conn).Write(msg.Data)
 	if err != nil {
-		log.WithField("session", msg.Session).Error(err)
+		log.WithField("session", msg.Session).Debug(err)
 		peer.connPool.delete(msg.Session)
 		_, err = wsw.writeClose()
 		if err != nil {
-			log.Error(err)
+			log.Warn(err)
 		}
 	}
 }
@@ -72,7 +72,7 @@ func (peer *peer) delete(session uint16) {
 	conn := peer.connPool.get(session)
 	if conn != nil {
 		peer.connPool.delete(session)
-		log.Debugf("Port %d Deleted", session)
+		log.WithField("session", session).Trace("Port Deleted")
 	}
 	peer.connPool.setCloseSent(session)
 }
@@ -91,29 +91,20 @@ func (peer *peer) processQueue() {
 			return
 		default:
 			<-peer.hasMessage
-			if (len(peer.hasMessage)+1)%50 == 0 {
-				log.WithField("len", len(peer.hasMessage)+1).Debug("Message Length") //test
-			}
+			var que *chan *websocket.PreparedMessage
 			if len(peer.controlQueue) > 0 {
-				err := peer.wsConn.WritePreparedMessage(<-peer.controlQueue)
-				if err != nil {
-					log.Error(err)
-					err = peer.Close()
-					if err != nil {
-						log.Debug(err)
-					}
-					return
-				}
+				que = &peer.controlQueue
 			} else {
-				err := peer.wsConn.WritePreparedMessage(<-peer.messageQueue)
+				que = &peer.messageQueue
+			}
+			err := peer.wsConn.WritePreparedMessage(<-*que)
+			if err != nil {
+				log.Error(err)
+				err = peer.Close()
 				if err != nil {
-					log.Error(err)
-					err = peer.Close()
-					if err != nil {
-						log.Debug(err)
-					}
-					return
+					log.Warn(err)
 				}
+				return
 			}
 		}
 	}
@@ -130,7 +121,7 @@ func (peer *peer) Close() error {
 	peer.close <- 2
 	err := peer.wsConn.Close()
 	if err != nil {
-		log.Debug(err)
+		log.Warn(err)
 	}
 	peer.close <- 1
 	for i := uint16(0); i < 65535; i++ {

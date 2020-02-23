@@ -64,6 +64,7 @@ func (rg *routingGo) geoIPMatch(ipAddress net.IP) bool {
 	record, err := rg.DB.Country(ipAddress)
 	if err != nil {
 		log.WithField("IP", ipAddress.String()).Error(err)
+		return false
 	}
 	return record.Country.IsoCode == rg.Skip.Alpha2
 }

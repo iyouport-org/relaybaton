@@ -73,7 +73,10 @@ func (factory DoHResolverFactory) getDialFunction() func(ctx context.Context, ne
 	return func(ctx context.Context, network string, address string) (net.Conn, error) {
 		conn, err := factory.dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", factory.port))
 		if err != nil {
-			log.Error(err)
+			log.WithFields(log.Fields{
+				"network": network,
+				"address": address,
+			}).Error(err)
 			if conn != nil {
 				err = conn.Close()
 				if err != nil {
@@ -97,7 +100,10 @@ func (factory DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg
 	str := base64.RawURLEncoding.EncodeToString(wire)
 	req, err := http.NewRequest(http.MethodGet, factory.url.String()+"?dns="+str, nil)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(log.Fields{
+			"url":  factory.url.String(),
+			"wire": str,
+		}).Error(err)
 		return
 	}
 	req.Header.Add("content-type", "application/dns-message")
@@ -109,17 +115,25 @@ func (factory DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Error(err)
+		fields := log.Fields{}
+		for k, v := range resp.Header {
+			fields[k] = v
+		}
+		log.WithFields(fields).Error(err)
 		return
 	}
 	err = m.Unpack(body)
 	if err != nil {
-		log.Error(err)
+		log.WithField("body", body).Error(err)
 		return
 	}
 	err = w.WriteMsg(m)
 	if err != nil {
 		log.Error(err)
+		err = w.Close()
+		if err != nil {
+			log.Warn(err)
+		}
 		return
 	}
 }

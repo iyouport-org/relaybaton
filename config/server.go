@@ -32,15 +32,17 @@ func (st *serverTOML) Init() (sg *serverGo, err error) {
 		log.WithField("server.pretend", st.Pretend).Error(err)
 		return nil, err
 	}
-	sg.CertFile, err = os.Stat(st.CertFile)
-	if err != nil {
-		log.WithField("server.cert_file", st.CertFile).Error(err)
-		return nil, err
-	}
-	sg.KeyFile, err = os.Stat(st.KeyFile)
-	if err != nil {
-		log.WithField("server.key_file", st.KeyFile).Error(err)
-		return nil, err
+	if sg.Secure {
+		sg.CertFile, err = os.Stat(st.CertFile)
+		if err != nil {
+			log.WithField("server.cert_file", st.CertFile).Error(err)
+			return nil, err
+		}
+		sg.KeyFile, err = os.Stat(st.KeyFile)
+		if err != nil {
+			log.WithField("server.key_file", st.KeyFile).Error(err)
+			return nil, err
+		}
 	}
 	return sg, nil
 }
