@@ -18,7 +18,7 @@ type webSocketWriter struct {
 func (wsw webSocketWriter) Write(b []byte) (n int, err error) {
 	conn := wsw.peer.connPool.get(wsw.session)
 	if conn == nil {
-		err = errors.New("Write deleted connection")
+		err = errors.New("write deleted connection")
 		log.WithField("session", wsw.session).Error(err)
 		return 0, err
 	}
@@ -44,7 +44,7 @@ func (wsw webSocketWriter) writeClose() (n int, err error) {
 		log.WithField("msg", msg.Pack()).Error(err)
 		return 0, err
 	}
-	wsw.peer.controlQueue <- pMsg
+	wsw.peer.messageQueue <- pMsg
 	wsw.peer.hasMessage <- byte(1)
 	return 2, err
 }
