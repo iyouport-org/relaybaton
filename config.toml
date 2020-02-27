@@ -2,11 +2,66 @@
 file="./log.xml"
 level="error"
 
-[client]
-server="example.com"
+[dns]
+type="dot"
+server="cloudflare-dns.com"
+addr="1.0.0.1:853"
+local_resolve=true
+
+[clients]
 port=1081
-username="username"
-password="password"
+
+    [[clients.client]]
+    id="1"
+    server="example.com"
+    username="username"
+    password="password"
+    esni=true
+
+    [[clients.client]]
+    id="2"
+    server="example2.com"
+    username="username"
+    password="password"
+    esni=true
+
+[routes]
+geoip_file="GeoLite2-Country.mmdb"
+
+    [[routes.route]]
+    type="geoip"
+    cond="CN"
+    target="1"
+
+    [[routes.route]]
+    type="domain"
+    cond="www/.example/.com"
+    target="2"
+
+    [[routes.route]]
+    type="ipv4"
+    cond="1.1.1.1
+    target="2"
+
+    [[routes.route]]
+    type="ipv6"
+    cond="2001:DB8:2de:0:0:0:0:e13"
+    target="2"
+
+    [[routes.route]]
+    type="ipv4subnet"
+    cond="1.1.1.1/4"
+    target="2"
+
+    [[routes.route]]
+    type="ipv6subnet"
+    cond="2001:DB8:2de:0:0:0:0:e13/4"
+    target="2"
+
+    [[routes.route]]
+    type="default"
+    cond=""
+    target="1"
 
 [server]
 port=80
@@ -15,19 +70,8 @@ secure=false
 cert_file=""
 key_file=""
 
-[dns]
-type="dot"
-server="cloudflare-dns.com"
-addr="1.0.0.1:853"
-local_resolve=true
-
-[routing]
-type="geoip"
-file="GeoLite2-Country.mmdb"
-skip="CN"
-
 [db]
-type="sqlite3" #sqlite3, mysql, postgresql, sqlserver
+type="sqlite3"
 username="root"
 password="password"
 host="localhost"

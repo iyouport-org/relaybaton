@@ -64,12 +64,12 @@ func main() {
 			return
 		}
 		for {
-			client, err := relaybaton.NewClient(conf)
+			router, err := relaybaton.NewRouter(conf)
 			if err != nil {
 				log.Error(err)
 				continue
 			}
-			client.Run()
+			router.Run()
 		}
 	case "server":
 		err = confTOML.InitServer(conf)

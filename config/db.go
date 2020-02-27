@@ -51,7 +51,7 @@ func (dbt *dbTOML) Init() (dbg *dbGo, err error) {
 		connStr = fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s", dbt.Username, dbt.Password, dbt.Host, dbt.Port, dbt.Database)
 		dbg.Type = DBTypeSQLServer
 	default:
-		err = errors.New("unknown DB Type: " + dbt.Type)
+		err = errors.New("unknown GeoIPDB Type: " + dbt.Type)
 		log.WithField("db.type", dbt.Type).Error(err)
 		return nil, err
 	}

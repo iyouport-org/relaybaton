@@ -1,25 +1,27 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 )
 
 // ConfigTOML is the struct mapped from the configuration file
 type ConfigTOML struct {
 	Log     logTOML     `mapstructure:"log"`
-	Client  clientTOML  `mapstructure:"client"`
-	Server  serverTOML  `mapstructure:"server"`
 	DNS     dnsTOML     `mapstructure:"dns"`
-	Routing routingTOML `mapstructure:"routing"`
+	Clients clientsTOML `mapstructure:"clients"`
+	Routes  routesTOML  `mapstructure:"routes"`
+	Server  serverTOML  `mapstructure:"server"`
 	DB      dbTOML      `mapstructure:"db"`
 }
 
 type ConfigGo struct {
 	Log     *logGo     //client,server
-	Client  *clientGo  //client
-	Server  *serverGo  //server
 	DNS     *dnsGo     //client,server
-	Routing *routingGo //client
+	Clients *clientsGo //client
+	Routes  *routesGo  //client
+	Server  *serverGo  //server
 	DB      *dbGo      //server
 }
 
@@ -40,21 +42,22 @@ func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
 
 func (mc *ConfigTOML) InitClient(cg *ConfigGo) error {
 	var err error
-	cg.Client, err = mc.Client.Init()
+	cg.Clients, err = mc.Clients.Init()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	cg.Routing, err = mc.Routing.Init()
+	cg.Routes, err = mc.Routes.Init()
 	if err != nil {
 		log.Error(err)
 		return err
 	}
-	if cg.Routing.Type != RoutingTypeDefault && !cg.DNS.LocalResolve {
-		log.Warn("dns.local_resolve should be set true for routing")
-	}
-	if cg.Routing.Type != RoutingTypeDefault && cg.DNS.Type == DNSTypeDefault {
-		log.Warn("Secure DNS should be set for routing")
+	for _, v := range cg.Routes.Route {
+		if cg.Clients.Client[v.Target] == nil && v.Target != "default" {
+			err = errors.New(fmt.Sprintf("target %s do not exist", v.Target))
+			log.WithField("routes.route.target", v.Target).Error(err)
+			return err
+		}
 	}
 	return nil
 }

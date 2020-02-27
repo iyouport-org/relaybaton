@@ -41,21 +41,19 @@ func NewServer(conf *config.ConfigGo, wsConn *websocket.Conn) *Server {
 
 // Run start a server
 func (server *Server) Run() {
-	go server.peer.processQueue()
+	go server.processQueue()
 
 	for {
 		select {
-		case <-server.close:
+		case <-server.closing:
+			server.closing <- ServerClosed
 			return
 		default:
 			server.mutexWsRead.Lock()
 			_, content, err := server.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				err = server.Close()
-				if err != nil {
-					log.Warn(err)
-				}
+				server.Close()
 				return
 			}
 			go server.handleWsRead(content)
