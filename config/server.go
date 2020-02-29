@@ -4,11 +4,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/url"
 	"os"
+	"time"
 )
 
 type serverTOML struct {
 	Port     int    `mapstructure:"port"`
 	Pretend  string `mapstructure:"pretend"`
+	Timeout  int    `mapstructure:"timeout"`
 	Secure   bool   `mapstructure:"secure"`
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
@@ -17,6 +19,7 @@ type serverTOML struct {
 type serverGo struct {
 	Port     uint16
 	Pretend  *url.URL
+	Timeout  time.Duration
 	Secure   bool
 	CertFile os.FileInfo
 	KeyFile  os.FileInfo
@@ -24,8 +27,9 @@ type serverGo struct {
 
 func (st *serverTOML) Init() (sg *serverGo, err error) {
 	sg = &serverGo{
-		Port:   uint16(st.Port),
-		Secure: st.Secure,
+		Port:    uint16(st.Port),
+		Secure:  st.Secure,
+		Timeout: time.Duration(int64(st.Timeout) * int64(time.Second)),
 	}
 	sg.Pretend, err = url.Parse(st.Pretend)
 	if err != nil {

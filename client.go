@@ -32,9 +32,11 @@ type Client struct {
 
 // NewClient creates a new client using the given config.
 func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, error) {
+	log.WithField("id", confClient.ID).Debug("creating new client")
 	var err error
 	client := &Client{}
 	client.init(conf)
+	client.timeout = confClient.Timeout
 
 	u := url.URL{
 		Scheme: "wss",
@@ -55,10 +57,12 @@ func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, err
 				ServerName:     confClient.Server,
 			},
 			EnableCompression: true,
+			HandshakeTimeout:  time.Minute,
 		}
 	} else {
 		dialer = websocket.Dialer{
 			EnableCompression: true,
+			HandshakeTimeout:  time.Minute,
 		}
 	}
 
@@ -84,24 +88,37 @@ func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, err
 		log.Error(err)
 		return nil, err
 	}
-
+	err = client.wsConn.SetReadDeadline(time.Now().Add(time.Minute))
+	//err = client.wsConn.SetWriteDeadline(time.Now().Add(time.Minute))
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	log.WithField("id", confClient.ID).Debug("new client created")
 	return client, nil
 }
 
 // Run start a client
 func (client *Client) Run() {
 	go client.processQueue()
-
 	for {
 		select {
 		case <-client.closing:
 			client.closing <- ClientClosed
 			return
 		default:
-			client.mutexWsRead.Lock()
+			client.mutex.Lock()
 			_, content, err := client.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
+				client.mutex.Unlock()
+				client.Close()
+				return
+			}
+			err = client.wsConn.SetReadDeadline(time.Now().Add(client.timeout))
+			if err != nil {
+				log.Error(err)
+				client.mutex.Unlock()
 				client.Close()
 				return
 			}
@@ -122,17 +139,16 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 
 func (client *Client) accept(session uint16, conn *net.Conn) {
 	client.connPool.set(session, conn)
-	go client.peer.forward(session)
+	go client.forward(session)
 }
 
 func (client *Client) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
-	client.mutexWsRead.Unlock()
+	client.mutex.Unlock()
 	atyp := b[0]
 	session := binary.BigEndian.Uint16(b[1:3])
 	if client.connPool.isCloseSent(session) {
-		log.WithField("session", session).Debug("Deleted websocket read")
 		return
 	}
 	switch atyp {

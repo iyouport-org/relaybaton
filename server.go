@@ -35,6 +35,7 @@ type Server struct {
 func NewServer(conf *config.ConfigGo, wsConn *websocket.Conn) *Server {
 	server := &Server{}
 	server.init(conf)
+	server.timeout = conf.Server.Timeout
 	server.wsConn = wsConn
 	return server
 }
@@ -49,10 +50,18 @@ func (server *Server) Run() {
 			server.closing <- ServerClosed
 			return
 		default:
-			server.mutexWsRead.Lock()
+			server.mutex.Lock()
 			_, content, err := server.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
+				server.mutex.Unlock()
+				server.Close()
+				return
+			}
+			err = server.wsConn.SetReadDeadline(time.Now().Add(server.timeout))
+			if err != nil {
+				log.Error(err)
+				server.mutex.Unlock()
 				server.Close()
 				return
 			}
@@ -64,11 +73,10 @@ func (server *Server) Run() {
 func (server *Server) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
-	server.mutexWsRead.Unlock()
+	server.mutex.Unlock()
 	atyp := b[0]
 	session := binary.BigEndian.Uint16(b[1:3])
-	if server.connPool.isCloseSent(session) { //test
-		log.WithField("session", session).Debug("Deleted websocket read")
+	if server.connPool.isCloseSent(session) {
 		return
 	}
 	switch atyp {
@@ -111,7 +119,7 @@ func (server *Server) handleWsRead(content []byte) {
 		}
 		if err != nil {
 			log.WithField("addr", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort)).Error(err)
-			reply := socks5.NewReply(socks5.RepServerFailure, msg.Atyp, net.IPv4zero, []byte{0, 0})
+			reply := socks5.NewReply(socks5.RepHostUnreachable, msg.Atyp, net.IPv4zero, []byte{0, 0})
 			_, err = wsw.writeReply(*reply)
 			if err != nil {
 				log.Warn(err)
@@ -166,6 +174,12 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn.EnableWriteCompression(true)
 	err = wsConn.SetCompressionLevel(flate.BestCompression)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	err = wsConn.SetReadDeadline(time.Now().Add(time.Minute))
+	//err = wsConn.SetWriteDeadline(time.Now().Add(time.Minute))
 	if err != nil {
 		log.Error(err)
 		return

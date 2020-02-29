@@ -23,7 +23,7 @@ func Header2Fields(header http.Header, body io.ReadCloser) log.Fields {
 				fields[fmt.Sprintf("%s[%d]", k, i)] = str
 			}
 		} else {
-			fields[k] = v
+			fields[k] = v[0]
 		}
 	}
 	bodyStr, err := ioutil.ReadAll(body)

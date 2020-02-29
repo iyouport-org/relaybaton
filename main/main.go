@@ -18,7 +18,6 @@ func main() {
 		log.Fatal(err)
 		return
 	}
-
 	log.SetFormatter(relaybaton.XMLFormatter{})
 	log.SetReportCaller(true)
 

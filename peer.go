@@ -1,13 +1,13 @@
 package relaybaton
 
 import (
-	"errors"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/relaybaton/message"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"sync"
+	"time"
 )
 
 const (
@@ -21,17 +21,18 @@ const (
 
 type peer struct {
 	connPool     *connectionPool
-	mutexWsRead  sync.Mutex
+	mutex        sync.Mutex
 	controlQueue chan *websocket.PreparedMessage
 	messageQueue chan *websocket.PreparedMessage
 	hasMessage   chan byte
 	closing      chan byte
 	wsConn       *websocket.Conn
 	conf         *config.ConfigGo
+	timeout      time.Duration
 }
 
 func (peer *peer) init(conf *config.ConfigGo) {
-	peer.mutexWsRead = sync.Mutex{}
+	peer.mutex = sync.Mutex{}
 	peer.hasMessage = make(chan byte, 2^32+2^16)
 	peer.controlQueue = make(chan *websocket.PreparedMessage, 2^16)
 	peer.messageQueue = make(chan *websocket.PreparedMessage, 2^32)
@@ -86,7 +87,6 @@ func (peer *peer) delete(session uint16) {
 	conn := peer.connPool.get(session)
 	if conn != nil {
 		peer.connPool.delete(session)
-		log.WithField("session", session).Trace("Port Deleted")
 	}
 	peer.connPool.setCloseSent(session)
 }
@@ -137,7 +137,7 @@ LOOP:
 		select {
 		case <-peer.closing:
 			peer.closing <- ForwardClosed
-			return written, errors.New("peer closing")
+			return written, err
 		default:
 			nr, er := src.Read(buf)
 			if nr > 0 {
@@ -186,5 +186,6 @@ func (peer *peer) Close() {
 		}
 	}
 	peer.closing <- PeerClosed
+	log.Debug("peer closed")
 	return
 }

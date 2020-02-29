@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net"
 	"regexp"
+	"strings"
 )
 
 type routeType string
@@ -29,7 +30,7 @@ type routeTOML struct {
 type routeGo struct {
 	Type         routeType
 	GeoIPDB      *geoip2.Reader
-	CondGeoIP    string
+	CondGeoIP    []string
 	CondDomain   *regexp.Regexp
 	CondIP       net.IP
 	CondIPSubnet *net.IPNet
@@ -44,7 +45,7 @@ func (rt *routeTOML) Init(GeoIPDB *geoip2.Reader) (rg *routeGo, err error) {
 	case "geoip":
 		rg.Type = RouteTypeGeoIP
 		rg.GeoIPDB = GeoIPDB
-		rg.CondGeoIP = rt.Cond
+		rg.CondGeoIP = strings.Split(rt.Cond, ",")
 	case "domain":
 		rg.Type = RouteTypeDomain
 		rg.CondDomain, err = regexp.Compile(rt.Cond)
@@ -137,7 +138,12 @@ func (rg *routeGo) MatchIP(ip net.IP) bool {
 			log.WithField("IP", ip).Warn(err)
 			return false
 		}
-		return record.Country.IsoCode == rg.CondGeoIP
+		for _, v := range rg.CondGeoIP {
+			if record.Country.IsoCode == v {
+				return true
+			}
+		}
+		return false
 	case RouteTypeDefault:
 		return true
 	default:
