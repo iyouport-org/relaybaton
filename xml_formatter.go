@@ -66,7 +66,6 @@ func (fmter XMLFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 			e.Children = append(e.Children, elementMsg)
 		}
 	}
-
 	buf, _ := xml.MarshalIndent(e, "", "\t")
 
 	return append(buf, '\n'), nil

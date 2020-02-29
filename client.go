@@ -9,16 +9,19 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
+	"fmt"
 	"github.com/gorilla/websocket"
+	"github.com/iyouport-org/relaybaton/config"
+	"github.com/iyouport-org/relaybaton/message"
+	"github.com/iyouport-org/relaybaton/util"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 )
 
@@ -28,40 +31,55 @@ type Client struct {
 }
 
 // NewClient creates a new client using the given config.
-func NewClient(conf Config) (*Client, error) {
+func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, error) {
+	log.WithField("id", confClient.ID).Debug("creating new client")
 	var err error
 	client := &Client{}
 	client.init(conf)
+	client.timeout = confClient.Timeout
 
 	u := url.URL{
 		Scheme: "wss",
-		Host:   conf.Client.Server + ":443",
+		Host:   confClient.Server + ":443",
 		Path:   "/",
 	}
 
-	esniKey, err := getESNIKey(conf.Client.Server)
+	var dialer websocket.Dialer
+	if confClient.ESNI {
+		esniKey, err := getESNIKey(confClient.Server)
+		if err != nil {
+			log.WithField("server", confClient.Server).Error(err)
+			return nil, err
+		}
+		dialer = websocket.Dialer{
+			TLSClientConfig: &tls.Config{
+				ClientESNIKeys: esniKey,
+				ServerName:     confClient.Server,
+			},
+			EnableCompression: true,
+			HandshakeTimeout:  time.Minute,
+		}
+	} else {
+		dialer = websocket.Dialer{
+			EnableCompression: true,
+			HandshakeTimeout:  time.Minute,
+		}
+	}
+
+	header, err := buildHeader(confClient)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-
-	dialer := websocket.Dialer{
-		TLSClientConfig: &tls.Config{
-			ClientESNIKeys: esniKey,
-			ServerName:     conf.Client.Server,
-		},
-		EnableCompression: true,
-	}
-
-	header, err := buildHeader(conf)
+	var resp *http.Response
+	client.wsConn, resp, err = dialer.Dial(u.String(), header)
 	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-
-	client.wsConn, _, err = dialer.Dial(u.String(), header)
-	if err != nil {
-		log.Error(err)
+		fields := log.Fields{}
+		if resp != nil {
+			fields = util.Header2Fields(resp.Header, resp.Body)
+		}
+		fields["url"] = u.String()
+		log.WithFields(fields).Error(err)
 		return nil, err
 	}
 	client.wsConn.EnableWriteCompression(true)
@@ -70,296 +88,129 @@ func NewClient(conf Config) (*Client, error) {
 		log.Error(err)
 		return nil, err
 	}
-
+	err = client.wsConn.SetReadDeadline(time.Now().Add(time.Minute))
+	//err = client.wsConn.SetWriteDeadline(time.Now().Add(time.Minute))
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	log.WithField("id", confClient.ID).Debug("new client created")
 	return client, nil
 }
 
 // Run start a client
 func (client *Client) Run() {
-	sl, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	go client.listenSocks(sl)
-	go client.peer.processQueue()
-
-LOOP:
+	go client.processQueue()
 	for {
 		select {
-		case <-client.close:
-			break LOOP
+		case <-client.closing:
+			client.closing <- ClientClosed
+			return
 		default:
-			client.mutexWsRead.Lock()
+			client.mutex.Lock()
 			_, content, err := client.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				err = client.Close()
-				if err != nil {
-					log.Error(err)
-				}
-				break LOOP
+				client.mutex.Unlock()
+				client.Close()
+				return
 			}
-			go client.handleWsReadClient(content, client.wsConn)
+			err = client.wsConn.SetReadDeadline(time.Now().Add(client.timeout))
+			if err != nil {
+				log.Error(err)
+				client.mutex.Unlock()
+				client.Close()
+				return
+			}
+			go client.handleWsRead(content)
 		}
-	}
-	err = sl.Close()
-	if err != nil {
-		log.Error(err)
 	}
 }
 
 // Dial to the given address from the client and return the connection
 func (client *Client) Dial(address string) (net.Conn, error) {
-	rawConn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(client.conf.Client.Port))
+	dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", client.conf.Clients.Port), nil, nil)
 	if err != nil {
-		log.Error(err)
+		log.WithField("addr", address).Error(err)
 		return nil, err
 	}
-	negotiationRequest := socks5.NewNegotiationRequest([]byte{socks5.MethodNone})
-	err = negotiationRequest.WriteTo(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	negotiationReply, err := socks5.NewNegotiationReplyFrom(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	if negotiationReply.Method != socks5.MethodNone {
-		err = errors.New("unsupported method")
-		log.Error(err)
-		return nil, err
-	}
-	atyp, addr, port, err := client.resolve(address)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	request := socks5.NewRequest(socks5.CmdConnect, atyp, addr, uint16ToBytes(port))
-	err = request.WriteTo(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	reply, err := socks5.NewReplyFrom(rawConn)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	if reply.Rep != socks5.RepSuccess {
-		err = errors.New("request fail")
-		log.WithField("code", reply.Rep).Error(err)
-		return nil, err
-	}
-	return rawConn, nil
+	return dialer.Dial("tcp", address)
 }
 
-func (client *Client) listenSocks(sl net.Listener) {
-	for {
-		select {
-		case <-client.close:
-			return
-		default:
-			s5conn, err := sl.Accept()
-			if err != nil {
-				log.Error(err)
-				err = client.Close()
-				if err != nil {
-					log.Error(err)
-				}
-				return
-			}
-			port := uint16(s5conn.RemoteAddr().(*net.TCPAddr).Port)
-			wsw := client.getWebsocketWriter(port)
-			err = client.serveSocks5(&s5conn, &wsw)
-			if err != nil {
-				log.Error(err)
-				err = s5conn.Close()
-				if err != nil {
-					log.Error(err)
-				}
-				continue
-			}
-			client.connPool.set(port, &s5conn)
-			go client.peer.forward(port)
-		}
-	}
+func (client *Client) accept(session uint16, conn *net.Conn) {
+	client.connPool.set(session, conn)
+	go client.forward(session)
 }
 
-func (client *Client) handleWsReadClient(content []byte, wsConn *websocket.Conn) {
+func (client *Client) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
-	client.mutexWsRead.Unlock()
-	prefix := binary.BigEndian.Uint16(b[:2])
-	if client.connPool.isCloseSent(prefix) {
+	client.mutex.Unlock()
+	atyp := b[0]
+	session := binary.BigEndian.Uint16(b[1:3])
+	if client.connPool.isCloseSent(session) {
 		return
 	}
-	switch prefix {
+	switch atyp {
 	case 0: //delete
-		session := binary.BigEndian.Uint16(b[2:])
-		client.delete(session)
-
-	case uint16(socks5.ATYPIPv4), uint16(socks5.ATYPDomain), uint16(socks5.ATYPIPv6):
-		atyp := b[1]
-		session := binary.BigEndian.Uint16(b[2:4])
-		rep := b[4]
-		bndPort := b[5:7]
-		bndAddr := b[7:]
-		reply := socks5.NewReply(rep, atyp, bndAddr, bndPort)
-		wsw := client.getWebsocketWriter(session)
-		conn := client.connPool.get(session)
+		msg := message.UnpackDelete(b)
+		client.delete(msg.Session)
+	case 2: //data
+		msg := message.UnpackData(b)
+		client.receive(msg)
+	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //reply {1,3,4}
+		msg := message.UnpackReply(b)
+		wsw := client.getWebsocketWriter(msg.Session)
+		conn := client.connPool.get(msg.Session)
 		if conn == nil {
-			log.WithField("session", session).Warnf("WebSocket deleted read") //test
+			log.WithField("session", msg.Session).Warn("WebSocket deleted read") //test
 			_, err := wsw.writeClose()
 			if err != nil {
-				log.Error(err)
+				log.WithField("session", msg.Session).Trace(err)
 			}
 			return
 		}
-		err := reply.WriteTo(*conn)
+		err := msg.GetReply().WriteTo(*conn)
 		if err != nil {
-			log.WithField("session", session).Error(err)
-			client.connPool.delete(session)
+			log.WithField("session", msg.Session).Trace(err)
+			client.connPool.delete(msg.Session)
 			_, err = wsw.writeClose()
 			if err != nil {
-				log.Error(err)
+				log.WithField("session", msg.Session).Warn(err)
 			}
 		}
-		if rep != socks5.RepSuccess {
-			client.connPool.delete(session)
-		}
-
-	default:
-		session := prefix
-		client.receive(session, b[2:])
+	default: //unknown
+		log.WithField("atyp", atyp).Warn("Unknown type message")
 	}
 }
 
-func (client *Client) resolve(address string) (atyp byte, addr []byte, port uint16, err error) {
-	addrTCP, err := net.ResolveTCPAddr("tcp", address)
-	if err != nil {
-		log.Debug(err)
-		addrDomain, err := url.Parse("http://" + address)
-		if err != nil {
-			log.Debug(err)
-			return 0, nil, 0, err
-		}
-		if addrDomain.Port() != "" && addrDomain.Hostname() != "" {
-			portInt, err := strconv.Atoi(addrDomain.Port())
-			if err != nil {
-				log.Debug(err)
-				return 0, nil, 0, err
-			}
-			return socks5.ATYPDomain, []byte(addrDomain.Hostname()), uint16(portInt), nil
-		}
-		return 0, nil, 0, err
-	}
-	if addrTCP.IP.To4() != nil {
-		return socks5.ATYPIPv4, []byte(addrTCP.IP.To4().String()), uint16(addrTCP.Port), nil
-	}
-	return socks5.ATYPIPv6, []byte(addrTCP.IP.To16().String()), uint16(addrTCP.Port), nil
-}
-
-func (client *Client) localResolve(request *socks5.Request) (*socks5.Request, error) {
-	if request.Atyp == socks5.ATYPDomain && client.conf.DNS.LocalResolve {
-		ips, err := net.LookupIP(string(request.DstAddr[1:]))
-		log.WithField("Domain", string(request.DstAddr[1:])).Debug("Looking up IP") //test
-		if err != nil {
-			log.Debug(err)
-			return nil, err
-		}
-		if len(ips) > 0 {
-			for _, ip := range ips {
-				if ip.To4() != nil {
-					log.Debug(ip.To4()) //test
-					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv4, ip.To4(), request.DstPort), nil
-				}
-				if ip.To16() != nil {
-					log.Debug(ip.To16()) //test
-					return socks5.NewRequest(request.Cmd, socks5.ATYPIPv6, ip.To16(), request.DstPort), nil
-				}
-			}
-		}
-	}
-	return request, nil
-}
-
-func (client *Client) serveSocks5(conn *net.Conn, wsw *webSocketWriter) error {
-	negotiationRequest, err := socks5.NewNegotiationRequestFrom(*conn)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	var m byte
-	got := false
-	for _, m = range negotiationRequest.Methods {
-		if m == socks5.MethodNone {
-			got = true
-		}
-	}
-	if !got {
-		err = errors.New("method not supported")
-		log.Error(err)
-		return err
-	}
-	negotiationRely := socks5.NewNegotiationReply(socks5.MethodNone)
-	err = negotiationRely.WriteTo(*conn)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	request, err := socks5.NewRequestFrom(*conn)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	if request.Cmd != socks5.CmdConnect {
-		err = errors.New("command not supported")
-		log.Error(err)
-		return err
-	}
-	newRequest, err := client.localResolve(request)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	_, err = wsw.writeConnect(*newRequest)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
-}
-
-func buildHeader(conf Config) (http.Header, error) {
+func buildHeader(confClient *config.ClientGo) (http.Header, error) {
 	header := http.Header{}
 	nonce := make([]byte, 12)
 	_, err := io.ReadFull(rand.Reader, nonce)
 	if err != nil {
-		log.Error(err)
+		log.WithField("nonce", nonce).Error(err)
 		return nil, err
 	}
-	key := argon2.Key([]byte(conf.Client.Password), nonce, 3, 32*1024, 4, 32)
+	key := argon2.Key([]byte(confClient.Password), nonce, 3, 32*1024, 4, 32)
 	var plaintext = make([]byte, 8)
 	binary.BigEndian.PutUint64(plaintext, uint64(time.Now().UnixNano()))
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		log.Error(err)
+		log.WithField("key", key).Error(err)
 		return nil, err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		log.Error(err)
+		log.WithField("key", key).Error(err)
 		return nil, err
 	}
 
 	cipherText := aesgcm.Seal(nonce, nonce, plaintext, nil)
 
-	header.Add("username", conf.Client.Username)
+	header.Add("username", confClient.Username)
 	header.Add("token", hex.EncodeToString(cipherText))
 	return header, nil
 }
@@ -367,22 +218,18 @@ func buildHeader(conf Config) (http.Header, error) {
 func getESNIKey(domain string) (*tls.ESNIKeys, error) {
 	txt, err := net.LookupTXT("_esni." + domain)
 	if err != nil {
-		log.Error(err)
+		log.WithField("domain", domain).Error(err)
 		return nil, err
 	}
 	rawRecord := txt[0]
 	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"rawRecord": rawRecord,
-		}).Error(err)
+		log.WithField("rawRecord", rawRecord).Error(err)
 		return nil, err
 	}
 	esniKey, err := tls.ParseESNIKeys(esniRecord)
 	if err != nil {
-		log.WithFields(log.Fields{
-			"esniRecord": esniRecord,
-		}).Error(err)
+		log.WithField("esniRecord", esniRecord).Error(err)
 		return nil, err
 	}
 	return esniKey, nil

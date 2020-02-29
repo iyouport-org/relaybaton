@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
@@ -17,29 +16,23 @@ import (
 type DoHResolverFactory struct {
 	dialer       net.Dialer
 	port         uint16
-	ip           net.IP
+	addr         net.Addr
 	url          url.URL
 	strictErrors bool
 	server       dns.Server
 	client       http.Client
 }
 
-func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ipStr string, strictErrors bool) (*DoHResolverFactory, error) {
+func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, addr net.Addr, strictErrors bool) (*DoHResolverFactory, error) {
 	u, err := url.ParseRequestURI("https://" + serverName + "/dns-query")
 	if err != nil {
-		return nil, err
-	}
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		err = errors.New("IP parse error")
-		log.Error(err)
 		return nil, err
 	}
 	factory := &DoHResolverFactory{
 		dialer:       dialer,
 		port:         port,
 		url:          *u,
-		ip:           ip,
+		addr:         addr,
 		strictErrors: strictErrors,
 		server: dns.Server{
 			Addr: fmt.Sprintf(":%d", port),
@@ -48,8 +41,8 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ip
 		client: http.Client{
 			Transport: &http.Transport{
 				Proxy: nil,
-				DialTLS: func(network, addr string) (net.Conn, error) {
-					return tls.Dial("tcp", ip.String()+":443", &tls.Config{
+				DialTLS: func(_, _ string) (net.Conn, error) {
+					return tls.Dial("tcp", addr.String()+":443", &tls.Config{
 						ServerName: u.Hostname(),
 					})
 				},
@@ -58,7 +51,12 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ip
 		},
 	}
 
-	go factory.server.ListenAndServe()
+	go func() {
+		err = factory.server.ListenAndServe()
+		if err != nil {
+			log.Error()
+		}
+	}()
 	dns.HandleFunc(".", factory.handleRequest)
 	return factory, nil
 }
@@ -75,7 +73,10 @@ func (factory DoHResolverFactory) getDialFunction() func(ctx context.Context, ne
 	return func(ctx context.Context, network string, address string) (net.Conn, error) {
 		conn, err := factory.dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", factory.port))
 		if err != nil {
-			log.Error(err)
+			log.WithFields(log.Fields{
+				"network": network,
+				"address": address,
+			}).Error(err)
 			if conn != nil {
 				err = conn.Close()
 				if err != nil {
@@ -99,7 +100,10 @@ func (factory DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg
 	str := base64.RawURLEncoding.EncodeToString(wire)
 	req, err := http.NewRequest(http.MethodGet, factory.url.String()+"?dns="+str, nil)
 	if err != nil {
-		log.Error(err)
+		log.WithFields(log.Fields{
+			"url":  factory.url.String(),
+			"wire": str,
+		}).Error(err)
 		return
 	}
 	req.Header.Add("content-type", "application/dns-message")
@@ -111,17 +115,25 @@ func (factory DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg
 	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Error(err)
+		fields := log.Fields{}
+		for k, v := range resp.Header {
+			fields[k] = v
+		}
+		log.WithFields(fields).Error(err)
 		return
 	}
 	err = m.Unpack(body)
 	if err != nil {
-		log.Error(err)
+		log.WithField("body", body).Error(err)
 		return
 	}
 	err = w.WriteMsg(m)
 	if err != nil {
 		log.Error(err)
+		err = w.Close()
+		if err != nil {
+			log.Warn(err)
+		}
 		return
 	}
 }
