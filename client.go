@@ -100,29 +100,27 @@ func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, err
 
 // Run start a client
 func (client *Client) Run() {
-	go client.processQueue()
 	for {
 		select {
 		case <-client.closing:
 			client.closing <- ClientClosed
 			return
 		default:
-			client.mutex.Lock()
+			client.mutexRead.Lock()
 			_, content, err := client.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				client.mutex.Unlock()
-				client.Close()
-				return
-			}
-			err = client.wsConn.SetReadDeadline(time.Now().Add(client.timeout))
-			if err != nil {
-				log.Error(err)
-				client.mutex.Unlock()
+				client.mutexRead.Unlock()
 				client.Close()
 				return
 			}
 			go client.handleWsRead(content)
+			err = client.wsConn.SetReadDeadline(time.Now().Add(client.timeout))
+			if err != nil {
+				log.Error(err)
+				client.Close()
+				return
+			}
 		}
 	}
 }
@@ -138,6 +136,9 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 }
 
 func (client *Client) accept(session uint16, conn *net.Conn) {
+	if client.connPool.get(session) != nil {
+		client.connPool.delete(session)
+	}
 	client.connPool.set(session, conn)
 	go client.forward(session)
 }
@@ -145,7 +146,7 @@ func (client *Client) accept(session uint16, conn *net.Conn) {
 func (client *Client) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
-	client.mutex.Unlock()
+	client.mutexRead.Unlock()
 	atyp := b[0]
 	session := binary.BigEndian.Uint16(b[1:3])
 	if client.connPool.isCloseSent(session) {

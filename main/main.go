@@ -7,9 +7,11 @@ import (
 	"github.com/iyouport-org/relaybaton/dns"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -20,7 +22,7 @@ func main() {
 	}
 	log.SetFormatter(relaybaton.XMLFormatter{})
 	log.SetReportCaller(true)
-
+	rand.Seed(time.Now().UnixNano())
 	v := viper.New()
 	v.SetConfigName("config")
 	v.AddConfigPath(".")

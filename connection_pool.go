@@ -7,15 +7,15 @@ import (
 )
 
 type connectionPool struct {
-	conns     [65536]*net.Conn
+	conns     [1 << 16]*net.Conn
 	mutex     sync.RWMutex
-	closeSent [65536]bool
+	closeSent [1 << 16]bool
 }
 
 func newConnectionPool() *connectionPool {
 	cp := &connectionPool{}
 	i := 0
-	for i < 65536 {
+	for i < (1 << 16) {
 		cp.conns[i] = nil
 		i++
 	}

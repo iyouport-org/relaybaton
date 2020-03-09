@@ -42,7 +42,7 @@ func NewServer(conf *config.ConfigGo, wsConn *websocket.Conn) *Server {
 
 // Run start a server
 func (server *Server) Run() {
-	go server.processQueue()
+	//go server.processQueue()
 
 	for {
 		select {
@@ -50,18 +50,18 @@ func (server *Server) Run() {
 			server.closing <- ServerClosed
 			return
 		default:
-			server.mutex.Lock()
+			server.mutexRead.Lock()
 			_, content, err := server.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				server.mutex.Unlock()
+				server.mutexRead.Unlock()
 				server.Close()
 				return
 			}
 			err = server.wsConn.SetReadDeadline(time.Now().Add(server.timeout))
 			if err != nil {
 				log.Error(err)
-				server.mutex.Unlock()
+				server.mutexRead.Unlock()
 				server.Close()
 				return
 			}
@@ -73,7 +73,7 @@ func (server *Server) Run() {
 func (server *Server) handleWsRead(content []byte) {
 	b := make([]byte, len(content))
 	copy(b, content)
-	server.mutex.Unlock()
+	server.mutexRead.Unlock()
 	atyp := b[0]
 	session := binary.BigEndian.Uint16(b[1:3])
 	if server.connPool.isCloseSent(session) {
@@ -141,7 +141,9 @@ func (server *Server) handleWsRead(content []byte) {
 			}).Warn(err)
 			return
 		}
-
+		if server.connPool.get(msg.Session) != nil {
+			server.connPool.delete(msg.Session)
+		}
 		server.connPool.set(msg.Session, &conn)
 		go server.peer.forward(msg.Session)
 	default:

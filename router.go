@@ -58,6 +58,7 @@ func (router *Router) Run() {
 		go router.serveSocks5(s5conn)
 	}
 }
+
 func (router *Router) watchClient(conf *config.ConfigGo, confClient *config.ClientGo) {
 	for {
 		client := router.clients[confClient.ID]

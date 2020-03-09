@@ -28,8 +28,15 @@ func (wsw webSocketWriter) Write(b []byte) (n int, err error) {
 		log.WithField("msg", msg.Pack()).Error(err)
 		return 0, err
 	}
-	wsw.peer.messageQueue <- pMsg
-	wsw.peer.hasMessage <- byte(1)
+	wsw.peer.mutexWrite.Lock()
+	err = wsw.peer.wsConn.WritePreparedMessage(pMsg)
+	if err != nil {
+		log.WithField("session", wsw.session).Error(err)
+		wsw.peer.Close()
+		wsw.peer.mutexWrite.Unlock()
+		return 0, err
+	}
+	wsw.peer.mutexWrite.Unlock()
 	return len(b), err
 }
 
@@ -44,8 +51,15 @@ func (wsw webSocketWriter) writeClose() (n int, err error) {
 		log.WithField("msg", msg.Pack()).Error(err)
 		return 0, err
 	}
-	wsw.peer.messageQueue <- pMsg
-	wsw.peer.hasMessage <- byte(1)
+	wsw.peer.mutexWrite.Lock()
+	err = wsw.peer.wsConn.WritePreparedMessage(pMsg)
+	if err != nil {
+		log.WithField("session", wsw.session).Error(err)
+		wsw.peer.Close()
+		wsw.peer.mutexWrite.Unlock()
+		return 0, err
+	}
+	wsw.peer.mutexWrite.Unlock()
 	return 2, err
 }
 
@@ -61,8 +75,15 @@ func (wsw webSocketWriter) writeConnect(request socks5.Request) (n int, err erro
 		log.WithField("msg", msg.Pack()).Error(err)
 		return 0, err
 	}
-	wsw.peer.controlQueue <- pMsg
-	wsw.peer.hasMessage <- byte(1)
+	wsw.peer.mutexWrite.Lock()
+	err = wsw.peer.wsConn.WritePreparedMessage(pMsg)
+	if err != nil {
+		log.WithField("session", wsw.session).Error(err)
+		wsw.peer.Close()
+		wsw.peer.mutexWrite.Unlock()
+		return 0, err
+	}
+	wsw.peer.mutexWrite.Unlock()
 	return msg.Length, err
 }
 
@@ -79,7 +100,16 @@ func (wsw webSocketWriter) writeReply(reply socks5.Reply) (n int, err error) {
 		log.WithField("msg", msg.Pack()).Error(err)
 		return 0, err
 	}
-	wsw.peer.controlQueue <- pMsg
-	wsw.peer.hasMessage <- byte(1)
+	//wsw.peer.controlQueue <- pMsg
+	//wsw.peer.hasMessage <- byte(1)
+	wsw.peer.mutexWrite.Lock()
+	err = wsw.peer.wsConn.WritePreparedMessage(pMsg)
+	if err != nil {
+		log.WithField("session", wsw.session).Error(err)
+		wsw.peer.Close()
+		wsw.peer.mutexWrite.Unlock()
+		return 0, err
+	}
+	wsw.peer.mutexWrite.Unlock()
 	return msg.Length, err
 }
