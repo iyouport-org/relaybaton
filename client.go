@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -88,6 +89,7 @@ func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, err
 		log.Error(err)
 		return nil, err
 	}
+
 	err = client.wsConn.SetReadDeadline(time.Now().Add(time.Minute))
 	//err = client.wsConn.SetWriteDeadline(time.Now().Add(time.Minute))
 	if err != nil {
@@ -106,21 +108,19 @@ func (client *Client) Run() {
 			client.closing <- ClientClosed
 			return
 		default:
-			client.mutexRead.Lock()
 			_, content, err := client.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				client.mutexRead.Unlock()
 				client.Close()
 				return
 			}
-			go client.handleWsRead(content)
 			err = client.wsConn.SetReadDeadline(time.Now().Add(client.timeout))
 			if err != nil {
 				log.Error(err)
 				client.Close()
 				return
 			}
+			client.handleWsRead(content)
 		}
 	}
 }
@@ -135,18 +135,16 @@ func (client *Client) Dial(address string) (net.Conn, error) {
 	return dialer.Dial("tcp", address)
 }
 
-func (client *Client) accept(session uint16, conn *net.Conn) {
-	if client.connPool.get(session) != nil {
+func (client *Client) accept(session uint16, dst string, conn *net.Conn) {
+	if client.connPool.getConn(session) != nil {
 		client.connPool.delete(session)
 	}
-	client.connPool.set(session, conn)
+	client.connPool.set(session, dst, conn)
+	client.mutexes.LoadOrStore(dst, new(sync.Mutex))
 	go client.forward(session)
 }
 
-func (client *Client) handleWsRead(content []byte) {
-	b := make([]byte, len(content))
-	copy(b, content)
-	client.mutexRead.Unlock()
+func (client *Client) handleWsRead(b []byte) {
 	atyp := b[0]
 	session := binary.BigEndian.Uint16(b[1:3])
 	if client.connPool.isCloseSent(session) {
@@ -161,8 +159,8 @@ func (client *Client) handleWsRead(content []byte) {
 		client.receive(msg)
 	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //reply {1,3,4}
 		msg := message.UnpackReply(b)
-		wsw := client.getWebsocketWriter(msg.Session)
-		conn := client.connPool.get(msg.Session)
+		wsw := client.getWebsocketWriter(msg.Session, client.connPool.getDst(msg.Session))
+		conn := client.connPool.getConn(msg.Session)
 		if conn == nil {
 			log.WithField("session", msg.Session).Warn("WebSocket deleted read") //test
 			_, err := wsw.writeClose()

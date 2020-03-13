@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -42,19 +43,15 @@ func NewServer(conf *config.ConfigGo, wsConn *websocket.Conn) *Server {
 
 // Run start a server
 func (server *Server) Run() {
-	//go server.processQueue()
-
 	for {
 		select {
 		case <-server.closing:
 			server.closing <- ServerClosed
 			return
 		default:
-			server.mutexRead.Lock()
 			_, content, err := server.wsConn.ReadMessage()
 			if err != nil {
 				log.Error(err)
-				server.mutexRead.Unlock()
 				server.Close()
 				return
 			}
@@ -65,15 +62,12 @@ func (server *Server) Run() {
 				server.Close()
 				return
 			}
-			go server.handleWsRead(content)
+			server.handleWsRead(content)
 		}
 	}
 }
 
-func (server *Server) handleWsRead(content []byte) {
-	b := make([]byte, len(content))
-	copy(b, content)
-	server.mutexRead.Unlock()
+func (server *Server) handleWsRead(b []byte) {
 	atyp := b[0]
 	session := binary.BigEndian.Uint16(b[1:3])
 	if server.connPool.isCloseSent(session) {
@@ -87,8 +81,9 @@ func (server *Server) handleWsRead(content []byte) {
 		msg := message.UnpackData(b)
 		server.receive(msg)
 	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //request {1,3,4}
+		var dstStr string
 		msg := message.UnpackConnect(b)
-		wsw := server.getWebsocketWriter(msg.Session)
+		wsw := server.getWebsocketWriter(msg.Session, msg.GetDstMsg())
 		var dstAddr net.IP
 		var err error
 		if msg.Atyp != socks5.ATYPDomain { //{IPv4,IPv6}
@@ -113,9 +108,11 @@ func (server *Server) handleWsRead(content []byte) {
 		}
 		var conn net.Conn
 		if dstAddr.To4() != nil { //IPv4
-			conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort))
+			dstStr = fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort)
+			conn, err = net.Dial("tcp", dstStr)
 		} else { //IPv6
-			conn, err = net.Dial("tcp", fmt.Sprintf("[%s]:%d", dstAddr.String(), msg.DstPort))
+			dstStr = fmt.Sprintf("[%s]:%d", dstAddr.String(), msg.DstPort)
+			conn, err = net.Dial("tcp", dstStr)
 		}
 		if err != nil {
 			log.WithField("addr", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort)).Error(err)
@@ -141,10 +138,11 @@ func (server *Server) handleWsRead(content []byte) {
 			}).Warn(err)
 			return
 		}
-		if server.connPool.get(msg.Session) != nil {
+		if server.connPool.getConn(msg.Session) != nil {
 			server.connPool.delete(msg.Session)
 		}
-		server.connPool.set(msg.Session, &conn)
+		server.connPool.set(msg.Session, msg.GetDstMsg(), &conn)
+		server.mutexes.LoadOrStore(msg.GetDstMsg(), new(sync.Mutex))
 		go server.peer.forward(msg.Session)
 	default:
 		log.WithField("atyp", atyp).Warn("Unknown type message")

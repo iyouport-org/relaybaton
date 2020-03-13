@@ -102,7 +102,7 @@ func (router *Router) serveSocks5(conn net.Conn) {
 		return
 	}
 	if clientKey == "default" {
-		router.directConect(request, conn)
+		router.directConnect(request, conn)
 		return
 	}
 	if clientKey == "" {
@@ -143,7 +143,7 @@ func (router *Router) serveSocks5(conn net.Conn) {
 		}
 		return
 	}
-	wsw := client.getWebsocketWriter(port)
+	wsw := client.getWebsocketWriter(port, util.GetDstReq(*request))
 	_, err = wsw.writeConnect(*request)
 	if err != nil {
 		log.WithField("session", port).Error(err)
@@ -153,7 +153,7 @@ func (router *Router) serveSocks5(conn net.Conn) {
 		}
 		return
 	}
-	client.accept(port, &conn)
+	client.accept(port, util.GetDstReq(*request), &conn)
 }
 
 func (router *Router) serveSocks5Negotiation(conn net.Conn) (*socks5.Request, error) { //select client
@@ -228,7 +228,7 @@ func (router *Router) selectClient(request *socks5.Request) (_ *socks5.Request, 
 	return request, clientKey, nil
 }
 
-func (router *Router) directConect(request *socks5.Request, s5conn net.Conn) {
+func (router *Router) directConnect(request *socks5.Request, s5conn net.Conn) {
 	var dstAddr string
 	port := binary.BigEndian.Uint16(request.DstPort)
 	if request.Atyp == socks5.ATYPDomain { //Domain

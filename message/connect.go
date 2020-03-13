@@ -2,8 +2,10 @@ package message
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/iyouport-org/relaybaton/util"
 	"github.com/iyouport-org/socks5"
+	"net"
 )
 
 type ConnectMessage struct {
@@ -35,4 +37,15 @@ func UnpackConnect(b []byte) ConnectMessage {
 
 func (cm ConnectMessage) GetRequest() *socks5.Request {
 	return socks5.NewRequest(socks5.CmdConnect, cm.Atyp, cm.DstAddr, util.Uint16ToBytes(cm.DstPort))
+}
+
+func (cm ConnectMessage) GetDstMsg() string {
+	switch cm.Atyp {
+	case socks5.ATYPIPv4:
+		return fmt.Sprintf("%s:%d", net.IP(cm.DstAddr).To4().String(), cm.DstPort)
+	case socks5.ATYPIPv6:
+		return fmt.Sprintf("[%s]:%d", net.IP(cm.DstAddr).To16().String(), cm.DstPort)
+	default: //Domain
+		return fmt.Sprintf("%s:%d", string(cm.DstAddr[1:]), cm.DstPort)
+	}
 }

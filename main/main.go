@@ -5,6 +5,7 @@ import (
 	"github.com/iyouport-org/relaybaton"
 	"github.com/iyouport-org/relaybaton/config"
 	"github.com/iyouport-org/relaybaton/dns"
+	"github.com/iyouport-org/relaybaton/util"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"math/rand"
@@ -20,7 +21,7 @@ func main() {
 		log.Fatal(err)
 		return
 	}
-	log.SetFormatter(relaybaton.XMLFormatter{})
+	log.SetFormatter(util.XMLFormatter{})
 	log.SetReportCaller(true)
 	rand.Seed(time.Now().UnixNano())
 	v := viper.New()

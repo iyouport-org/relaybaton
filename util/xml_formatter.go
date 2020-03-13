@@ -1,4 +1,4 @@
-package relaybaton
+package util
 
 import (
 	"encoding/xml"

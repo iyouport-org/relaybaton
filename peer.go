@@ -13,7 +13,6 @@ import (
 const (
 	PeerClosing = iota
 	ForwardClosed
-	ProcessQueueClosed
 	ClientClosed
 	ServerClosed
 	PeerClosed
@@ -27,6 +26,7 @@ type peer struct {
 	wsConn     *websocket.Conn
 	conf       *config.ConfigGo
 	timeout    time.Duration
+	mutexes    sync.Map
 }
 
 func (peer *peer) init(conf *config.ConfigGo) {
@@ -35,11 +35,12 @@ func (peer *peer) init(conf *config.ConfigGo) {
 	peer.connPool = newConnectionPool()
 	peer.closing = make(chan byte, 1<<10)
 	peer.conf = conf
+	peer.mutexes = sync.Map{}
 }
 
 func (peer *peer) forward(session uint16) {
-	wsw := peer.getWebsocketWriter(session)
-	conn := peer.connPool.get(session)
+	wsw := peer.getWebsocketWriter(session, peer.connPool.getDst(session))
+	conn := peer.connPool.getConn(session)
 	if conn == nil {
 		log.WithField("session", session).Warn("trying forward nil conn")
 		return
@@ -47,20 +48,20 @@ func (peer *peer) forward(session uint16) {
 	_, err := peer.copy(wsw, *conn)
 	if err != nil {
 		log.WithField("session", session).Trace(err)
-		peer.connPool.delete(session)
-		if err.Error() == "peer closing" {
-			return
-		}
-		_, err = wsw.writeClose()
-		if err != nil {
-			log.WithField("session", session).Error(err)
-		}
+	}
+	peer.connPool.delete(session)
+	if err != nil && err.Error() == "peer closing" {
+		return
+	}
+	_, err = wsw.writeClose()
+	if err != nil {
+		log.WithField("session", session).Error(err)
 	}
 }
 
 func (peer *peer) receive(msg message.DataMessage) {
-	wsw := peer.getWebsocketWriter(msg.Session)
-	conn := peer.connPool.get(msg.Session)
+	wsw := peer.getWebsocketWriter(msg.Session, peer.connPool.getDst(msg.Session))
+	conn := peer.connPool.getConn(msg.Session)
 	if conn == nil {
 		if peer.connPool.isCloseSent(msg.Session) {
 			return
@@ -84,16 +85,17 @@ func (peer *peer) receive(msg message.DataMessage) {
 }
 
 func (peer *peer) delete(session uint16) {
-	conn := peer.connPool.get(session)
+	conn := peer.connPool.getConn(session)
 	if conn != nil {
 		peer.connPool.delete(session)
 	}
 	peer.connPool.setCloseSent(session)
 }
 
-func (peer *peer) getWebsocketWriter(session uint16) webSocketWriter {
+func (peer *peer) getWebsocketWriter(session uint16, dst string) webSocketWriter {
 	return webSocketWriter{
 		session: session,
+		dst:     dst,
 		peer:    peer,
 	}
 }
@@ -150,6 +152,7 @@ func (peer *peer) Close() {
 	peer.closing <- PeerClosing
 	peer.closing <- PeerClosing
 	peer.closing <- PeerClosing
+	peer.closing <- PeerClosing
 
 	err := peer.wsConn.Close()
 	if err != nil {
@@ -157,7 +160,7 @@ func (peer *peer) Close() {
 	}
 
 	for i := 0; i < 1<<16; i++ {
-		if peer.connPool.get(uint16(i)) != nil {
+		if peer.connPool.getConn(uint16(i)) != nil {
 			peer.connPool.delete(uint16(i))
 		}
 	}
