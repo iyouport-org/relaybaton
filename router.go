@@ -44,7 +44,7 @@ func NewRouter(conf *config.ConfigGo) (router *Router, err error) {
 }
 
 func (router *Router) Run() {
-	sl, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", router.conf.Clients.Port))
+	sl, err := net.Listen("tcp", fmt.Sprintf(":%d", router.conf.Clients.Port))
 	if err != nil {
 		log.WithField("clients.port", router.conf.Clients.Port).Error(err)
 		return
