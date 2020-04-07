@@ -25,7 +25,6 @@ func (dm DataMessage) Pack() []byte {
 	msgBytes := []byte{2}
 	msgBytes = append(msgBytes, util.Uint16ToBytes(dm.Session)...)
 	msgBytes = append(msgBytes, dm.Data...)
-	dm.Length = len(msgBytes)
 	return msgBytes
 }
 
