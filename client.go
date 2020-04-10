@@ -38,27 +38,45 @@ func (client *Client) Run(request []byte, outConn net.Conn) {
 	conn, err := client.getNewConn()
 	if err != nil {
 		log.Error(err)
-		outConn.Close()
+		err = outConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
 		return
 	}
 	_, err = conn.Write(request)
 	if err != nil {
 		log.Error(err)
-		outConn.Close()
-		conn.Close()
+		err = outConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		err = conn.Close()
+		if err != nil {
+			log.Error(err)
+		}
 		return
 	}
-	b, err := conn.ReadMessage()
+	_, b, err := conn.ReadMessage()
 	if err != nil {
 		log.Error(err)
-		outConn.Close()
-		conn.Close()
+		err = outConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		err = conn.Close()
+		if err != nil {
+			log.Error(err)
+		}
 		return
 	}
 	switch b[0] {
 	case 0:
 		socks5.NewReply(socks5.RepHostUnreachable, socks5.ATYPIPv4, net.IPv4zero, []byte{0, 0}).WriteTo(outConn)
-		outConn.Close()
+		err = outConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
 		client.list.Enqueue(conn)
 		return
 	case 1:
@@ -67,8 +85,14 @@ func (client *Client) Run(request []byte, outConn net.Conn) {
 		//TODO
 	}
 	if conn.Run(outConn) != nil {
-		conn.Close()
-		outConn.Close()
+		err = conn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+		err = outConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
 	} else {
 		client.list.Enqueue(conn)
 	}

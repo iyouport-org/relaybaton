@@ -22,7 +22,8 @@ func NewConn(wsConn *websocket.Conn) *Conn {
 	return &Conn{
 		rawConn: wsConn,
 		outConn: nil,
-		closing: make(chan byte, 4),
+		closing: make(chan byte, 10),
+		closed:  sync.WaitGroup{},
 	}
 }
 
@@ -32,8 +33,9 @@ func (conn *Conn) Run(outConn net.Conn) net.Conn {
 	if err != nil {
 		log.Error(err)
 	}
+	conn.closed = sync.WaitGroup{}
 	conn.closed.Add(2)
-	conn.closing = make(chan byte, 4)
+	conn.closing = make(chan byte, 10)
 	go conn.Forward()
 	go conn.Copy()
 	conn.closed.Wait()
@@ -56,11 +58,10 @@ func (conn *Conn) Read(b []byte) (n int, err error) {
 	}
 }
 
-func (conn *Conn) ReadMessage() (p []byte, err error) {
+func (conn *Conn) ReadMessage() (messageType int, p []byte, err error) {
 	conn.mutexRead.Lock()
-	_, p, err = conn.rawConn.ReadMessage()
-	conn.mutexRead.Unlock()
-	return p, err
+	defer conn.mutexRead.Unlock()
+	return conn.rawConn.ReadMessage()
 }
 
 // Write writes data to the connection.
@@ -80,6 +81,20 @@ func (conn *Conn) Write(b []byte) (n int, err error) {
 		n = 0
 	}
 	return n, err
+}
+
+func (conn *Conn) WriteClose() {
+	pm, err := websocket.NewPreparedMessage(websocket.TextMessage, []byte{0})
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	conn.mutexWrite.Lock()
+	err = conn.rawConn.WritePreparedMessage(pm)
+	conn.mutexWrite.Unlock()
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 // Close closes the connection.
@@ -171,16 +186,22 @@ func (conn *Conn) Forward() {
 		case <-conn.closing:
 			return
 		default:
-			p, err := conn.ReadMessage()
+			t, p, err := conn.ReadMessage()
 			if err != nil {
 				log.Error(err)
 				go conn.Close()
 				<-conn.closing
 				return
 			}
+			if t == websocket.TextMessage {
+				go conn.End()
+				<-conn.closing
+				return
+			}
 			_, err = conn.outConn.Write(p)
 			if err != nil {
 				log.Error(err)
+				go conn.WriteClose()
 				go conn.End()
 				<-conn.closing
 				return
@@ -201,6 +222,7 @@ func (conn *Conn) Copy() {
 			nr, er := conn.outConn.Read(buf)
 			if er != nil {
 				log.Error(er)
+				go conn.WriteClose()
 				go conn.End()
 				<-conn.closing
 				return

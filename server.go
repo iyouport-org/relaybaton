@@ -62,7 +62,7 @@ type Server struct {
 
 func (server *Server) Run() {
 	for {
-		content, err := server.conn.ReadMessage()
+		_, content, err := server.conn.ReadMessage()
 		if err != nil {
 			log.Error(err)
 			err = server.conn.Close()
