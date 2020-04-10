@@ -9,15 +9,12 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
-	"github.com/iyouport-org/relaybaton/message"
 	"github.com/iyouport-org/relaybaton/util"
 	"github.com/iyouport-org/socks5"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/http"
@@ -25,36 +22,84 @@ import (
 	"time"
 )
 
-// Client of relaybaton
 type Client struct {
-	peer
+	list       *connList
+	confClient *config.ClientGo
 }
 
-// NewClient creates a new client using the given config.
-func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, error) {
-	log.WithField("id", confClient.ID).Debug("creating new client")
-	var err error
-	client := &Client{}
-	client.init(conf)
-	client.timeout = confClient.Timeout
+func NewClient(confClient *config.ClientGo) (*Client, error) {
+	return &Client{
+		list:       NewConnList(),
+		confClient: confClient,
+	}, nil
+}
 
+func (client *Client) Run(request []byte, outConn net.Conn) {
+	conn, err := client.getNewConn()
+	if err != nil {
+		log.Error(err)
+		outConn.Close()
+		return
+	}
+	_, err = conn.Write(request)
+	if err != nil {
+		log.Error(err)
+		outConn.Close()
+		conn.Close()
+		return
+	}
+	b, err := conn.ReadMessage()
+	if err != nil {
+		log.Error(err)
+		outConn.Close()
+		conn.Close()
+		return
+	}
+	switch b[0] {
+	case 0:
+		socks5.NewReply(socks5.RepHostUnreachable, socks5.ATYPIPv4, net.IPv4zero, []byte{0, 0}).WriteTo(outConn)
+		outConn.Close()
+		client.list.Enqueue(conn)
+		return
+	case 1:
+		socks5.NewReply(socks5.RepSuccess, request[0], request[3:], request[1:3]).WriteTo(outConn)
+	default:
+		//TODO
+	}
+	if conn.Run(outConn) != nil {
+		conn.Close()
+		outConn.Close()
+	} else {
+		client.list.Enqueue(conn)
+	}
+}
+
+func (client *Client) getNewConn() (*Conn, error) {
+	conn := client.list.Dequeue()
+	if conn != nil {
+		return conn, nil
+	} else {
+		return client.createNewConn()
+	}
+}
+
+func (client *Client) createNewConn() (*Conn, error) {
 	u := url.URL{
 		Scheme: "wss",
-		Host:   confClient.Server + ":443",
+		Host:   client.confClient.Server + ":443",
 		Path:   "/",
 	}
-
 	var dialer websocket.Dialer
-	if confClient.ESNI {
-		esniKey, err := getESNIKey(confClient.Server)
+	if client.confClient.ESNI {
+		esniKey, err := getESNIKey(client.confClient.Server)
 		if err != nil {
-			log.WithField("server", confClient.Server).Error(err)
+			log.WithField("server", client.confClient.Server).Error(err)
 			return nil, err
 		}
 		dialer = websocket.Dialer{
 			TLSClientConfig: &tls.Config{
 				ClientESNIKeys: esniKey,
-				ServerName:     confClient.Server,
+				ServerName:     client.confClient.Server,
 			},
 			EnableCompression: true,
 			HandshakeTimeout:  time.Minute,
@@ -66,13 +111,13 @@ func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, err
 		}
 	}
 
-	header, err := buildHeader(confClient)
+	header, err := buildHeader(client.confClient)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	var resp *http.Response
-	client.wsConn, resp, err = dialer.Dial(u.String(), header)
+
+	wsConn, resp, err := dialer.Dial(u.String(), header)
 	if err != nil {
 		fields := log.Fields{}
 		if resp != nil {
@@ -82,106 +127,14 @@ func NewClient(conf *config.ConfigGo, confClient *config.ClientGo) (*Client, err
 		log.WithFields(fields).Error(err)
 		return nil, err
 	}
-	client.wsConn.EnableWriteCompression(true)
-	err = client.wsConn.SetCompressionLevel(flate.BestCompression)
+	wsConn.EnableWriteCompression(true)
+	err = wsConn.SetCompressionLevel(flate.BestCompression)
 	if err != nil {
 		log.Error(err)
 		return nil, err
 	}
-	err = client.wsConn.SetReadDeadline(time.Now().Add(time.Minute))
-	//err = client.wsConn.SetWriteDeadline(time.Now().Add(time.Minute))
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
-	log.WithField("id", confClient.ID).Debug("new client created")
-	return client, nil
-}
-
-// Run start a client
-func (client *Client) Run() {
-	go client.processQueue()
-	for {
-		select {
-		case <-client.closing:
-			client.closing <- ClientClosed
-			return
-		default:
-			client.mutex.Lock()
-			_, content, err := client.wsConn.ReadMessage()
-			if err != nil {
-				log.Error(err)
-				client.mutex.Unlock()
-				client.Close()
-				return
-			}
-			err = client.wsConn.SetReadDeadline(time.Now().Add(client.timeout))
-			if err != nil {
-				log.Error(err)
-				client.mutex.Unlock()
-				client.Close()
-				return
-			}
-			go client.handleWsRead(content)
-		}
-	}
-}
-
-// Dial to the given address from the client and return the connection
-func (client *Client) Dial(address string) (net.Conn, error) {
-	dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", client.conf.Clients.Port), nil, nil)
-	if err != nil {
-		log.WithField("addr", address).Error(err)
-		return nil, err
-	}
-	return dialer.Dial("tcp", address)
-}
-
-func (client *Client) accept(session uint16, conn *net.Conn) {
-	client.connPool.set(session, conn)
-	go client.forward(session)
-}
-
-func (client *Client) handleWsRead(content []byte) {
-	b := make([]byte, len(content))
-	copy(b, content)
-	client.mutex.Unlock()
-	atyp := b[0]
-	session := binary.BigEndian.Uint16(b[1:3])
-	if client.connPool.isCloseSent(session) {
-		return
-	}
-	switch atyp {
-	case 0: //delete
-		msg := message.UnpackDelete(b)
-		client.delete(msg.Session)
-	case 2: //data
-		msg := message.UnpackData(b)
-		client.receive(msg)
-	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //reply {1,3,4}
-		msg := message.UnpackReply(b)
-		wsw := client.getWebsocketWriter(msg.Session)
-		conn := client.connPool.get(msg.Session)
-		if conn == nil {
-			log.WithField("session", msg.Session).Warn("WebSocket deleted read") //test
-			_, err := wsw.writeClose()
-			if err != nil {
-				log.WithField("session", msg.Session).Trace(err)
-			}
-			return
-		}
-		err := msg.GetReply().WriteTo(*conn)
-		if err != nil {
-			log.WithField("session", msg.Session).Trace(err)
-			client.connPool.delete(msg.Session)
-			_, err = wsw.writeClose()
-			if err != nil {
-				log.WithField("session", msg.Session).Warn(err)
-			}
-		}
-	default: //unknown
-		log.WithField("atyp", atyp).Warn("Unknown type message")
-	}
+	//log.WithField("id", client.confClient.ID).Debug("new client created")	//test
+	return NewConn(wsConn), nil
 }
 
 func buildHeader(confClient *config.ClientGo) (http.Header, error) {
@@ -192,7 +145,7 @@ func buildHeader(confClient *config.ClientGo) (http.Header, error) {
 		log.WithField("nonce", nonce).Error(err)
 		return nil, err
 	}
-	key := argon2.Key([]byte(confClient.Password), nonce, 3, 32*1024, 4, 32)
+	key := argon2.Key([]byte(confClient.Password), nonce, 1, 1024, 2, 32)
 	var plaintext = make([]byte, 8)
 	binary.BigEndian.PutUint64(plaintext, uint64(time.Now().UnixNano()))
 

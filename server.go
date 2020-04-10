@@ -10,14 +10,9 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/iyouport-org/relaybaton/config"
-	"github.com/iyouport-org/relaybaton/message"
 	"github.com/iyouport-org/relaybaton/util"
 	"github.com/iyouport-org/socks5"
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mssql"    //mssql
-	_ "github.com/jinzhu/gorm/dialects/mysql"    //mysql
-	_ "github.com/jinzhu/gorm/dialects/postgres" //postgres
-	_ "github.com/jinzhu/gorm/dialects/sqlite"   //sqlite
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/argon2"
 	"io/ioutil"
@@ -26,143 +21,17 @@ import (
 	"time"
 )
 
-// Server of relaybaton
-type Server struct {
-	peer
-}
-
-// NewServer creates a new server using the given config and websocket connection.
-func NewServer(conf *config.ConfigGo, wsConn *websocket.Conn) *Server {
-	server := &Server{}
-	server.init(conf)
-	server.timeout = conf.Server.Timeout
-	server.wsConn = wsConn
-	return server
-}
-
-// Run start a server
-func (server *Server) Run() {
-	go server.processQueue()
-
-	for {
-		select {
-		case <-server.closing:
-			server.closing <- ServerClosed
-			return
-		default:
-			server.mutex.Lock()
-			_, content, err := server.wsConn.ReadMessage()
-			if err != nil {
-				log.Error(err)
-				server.mutex.Unlock()
-				server.Close()
-				return
-			}
-			err = server.wsConn.SetReadDeadline(time.Now().Add(server.timeout))
-			if err != nil {
-				log.Error(err)
-				server.mutex.Unlock()
-				server.Close()
-				return
-			}
-			go server.handleWsRead(content)
-		}
-	}
-}
-
-func (server *Server) handleWsRead(content []byte) {
-	b := make([]byte, len(content))
-	copy(b, content)
-	server.mutex.Unlock()
-	atyp := b[0]
-	session := binary.BigEndian.Uint16(b[1:3])
-	if server.connPool.isCloseSent(session) {
-		return
-	}
-	switch atyp {
-	case 0: //delete
-		msg := message.UnpackDelete(b)
-		server.delete(msg.Session)
-	case 2: //data
-		msg := message.UnpackData(b)
-		server.receive(msg)
-	case socks5.ATYPIPv4, socks5.ATYPDomain, socks5.ATYPIPv6: //request {1,3,4}
-		msg := message.UnpackConnect(b)
-		wsw := server.getWebsocketWriter(msg.Session)
-		var dstAddr net.IP
-		var err error
-		if msg.Atyp != socks5.ATYPDomain { //{IPv4,IPv6}
-			dstAddr = msg.DstAddr
-		} else { //Domain
-			var dstAddrs []net.IP
-			dstAddrs, err = net.LookupIP(string(b[7:]))
-			if len(dstAddrs) > 0 {
-				dstAddr = dstAddrs[0]
-			} else {
-				err = errors.New("cannot resolve domain name")
-			}
-		}
-		if err != nil || dstAddr == nil {
-			log.WithField("addr", string(b[7:])).Warn(err)
-			reply := socks5.NewReply(socks5.RepHostUnreachable, msg.Atyp, net.IPv4zero, []byte{0, 0})
-			_, err = wsw.writeReply(*reply)
-			if err != nil {
-				log.Warn(err)
-			}
-			return
-		}
-		var conn net.Conn
-		if dstAddr.To4() != nil { //IPv4
-			conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort))
-		} else { //IPv6
-			conn, err = net.Dial("tcp", fmt.Sprintf("[%s]:%d", dstAddr.String(), msg.DstPort))
-		}
-		if err != nil {
-			log.WithField("addr", fmt.Sprintf("%s:%d", dstAddr.String(), msg.DstPort)).Error(err)
-			reply := socks5.NewReply(socks5.RepHostUnreachable, msg.Atyp, net.IPv4zero, []byte{0, 0})
-			_, err = wsw.writeReply(*reply)
-			if err != nil {
-				log.Warn(err)
-			}
-			return
-		}
-		_, addr, port, err := socks5.ParseAddress(conn.LocalAddr().String())
-		if err != nil {
-			log.WithField("addr", conn.LocalAddr().String()).Error(err)
-			return
-		}
-		reply := socks5.NewReply(socks5.RepSuccess, msg.Atyp, addr, port)
-		_, err = wsw.writeReply(*reply)
-		if err != nil {
-			log.WithFields(log.Fields{
-				"atyp": msg.Atyp,
-				"addr": addr,
-				"port": port,
-			}).Warn(err)
-			return
-		}
-
-		server.connPool.set(msg.Session, &conn)
-		go server.peer.forward(msg.Session)
-	default:
-		log.WithField("atyp", atyp).Warn("Unknown type message")
-	}
-}
-
-// Handler pass config to ServeHTTP()
 type Handler struct {
 	Conf *config.ConfigGo
-	db   *gorm.DB
+	DB   *gorm.DB
 }
 
-// ServerHTTP accept incoming HTTP request, establish websocket connections, and a new server for handling the connection. If authentication failed, the request will be redirected to the website set in the configuration file.
 func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var err error
 	var wsConn *websocket.Conn
+	var err error
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 	}
-	handler.db = handler.Conf.DB.DB
 	err = handler.authenticate(r.Header)
 	if err == nil {
 		wsConn, err = upgrader.Upgrade(w, r, nil)
@@ -178,14 +47,67 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Error(err)
 		return
 	}
-	err = wsConn.SetReadDeadline(time.Now().Add(time.Minute))
-	//err = wsConn.SetWriteDeadline(time.Now().Add(time.Minute))
-	if err != nil {
-		log.Error(err)
-		return
+
+	server := Server{
+		conn: NewConn(wsConn),
+		Conf: handler.Conf,
 	}
-	server := NewServer(handler.Conf, wsConn)
-	go server.Run()
+	server.Run()
+}
+
+type Server struct {
+	conn *Conn
+	Conf *config.ConfigGo
+}
+
+func (server *Server) Run() {
+	for {
+		content, err := server.conn.ReadMessage()
+		if err != nil {
+			log.Error(err)
+			err = server.conn.Close()
+			if err != nil {
+				log.Error(err)
+			}
+			return
+		}
+		if len(content) > 3 {
+			port := binary.BigEndian.Uint16(content[1:3])
+			var connStr string
+			switch content[0] {
+			case socks5.ATYPIPv4:
+				connStr = fmt.Sprintf("%s:%d", net.IP(content[3:]).To4().String(), port)
+			case socks5.ATYPIPv6:
+				connStr = fmt.Sprintf("[%s]:%d", net.IP(content[3:]).To16().String(), port)
+			default:
+				//TODO
+			}
+			outConn, err := net.Dial("tcp", connStr)
+			if err != nil {
+				log.Error(err)
+				_, err = server.conn.Write([]byte{0})
+				if err != nil {
+					log.Error(err)
+					err = server.conn.Close()
+					if err != nil {
+						log.Error(err)
+					}
+				}
+			} else {
+				_, err = server.conn.Write([]byte{1})
+				if err != nil {
+					log.Error(err)
+					err = server.conn.Close()
+					if err != nil {
+						log.Error(err)
+					}
+				}
+				if server.conn.Run(outConn) != nil {
+					return
+				}
+			}
+		}
+	}
 }
 
 func (handler Handler) authenticate(header http.Header) error {
@@ -221,7 +143,7 @@ func (handler Handler) authenticate(header http.Header) error {
 		log.WithField("username", username).Error(err)
 		return err
 	}
-	key := argon2.Key([]byte(password), nonce, 3, 32*1024, 4, 32)
+	key := argon2.Key([]byte(password), nonce, 1, 1024, 2, 32)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		log.WithField("key", key).Error(err)
@@ -261,7 +183,7 @@ func (handler Handler) authenticate(header http.Header) error {
 }
 
 func (handler Handler) getPassword(username string) (string, error) {
-	db := handler.db
+	db := handler.DB
 	db.AutoMigrate(&User{})
 	var user User
 	err := db.Where("username = ?", username).First(&user).Error
@@ -273,7 +195,7 @@ func (handler Handler) getPassword(username string) (string, error) {
 }
 
 func (handler Handler) nonceUsed(username string, nonce []byte) (bool, error) {
-	db := handler.db
+	db := handler.DB
 	db.AutoMigrate(&NonceRecord{})
 	var nonceRecord NonceRecord
 	db = db.Where(&NonceRecord{Username: username, Nonce: nonce}).First(&nonceRecord)
@@ -292,7 +214,7 @@ func (handler Handler) nonceUsed(username string, nonce []byte) (bool, error) {
 }
 
 func (handler Handler) saveNonce(username string, nonce []byte) error {
-	db := handler.db
+	db := handler.DB
 	db.AutoMigrate(&NonceRecord{})
 	newNonce := &NonceRecord{
 		Username: username,

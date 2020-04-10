@@ -10,41 +10,32 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
-	"sync"
 )
 
 type Router struct {
-	conf        *config.ConfigGo
-	clients     map[string]*Client
-	stats       sync.Map
-	mutex       sync.RWMutex
-	needRestart chan byte
+	conf    *config.ConfigGo
+	clients map[string]*Client
 }
 
 func NewRouter(conf *config.ConfigGo) (router *Router, err error) {
 	router = &Router{
-		conf:        conf,
-		clients:     map[string]*Client{},
-		stats:       sync.Map{},
-		mutex:       sync.RWMutex{},
-		needRestart: make(chan byte, 1),
+		conf:    conf,
+		clients: map[string]*Client{},
 	}
 	router.clients["default"] = nil
 	for _, v := range router.conf.Clients.Client {
-		client, err := NewClient(router.conf, v)
+		client, err := NewClient(v) //NewClient(router.Conf, v)
 		if err != nil {
 			log.WithField("clients.client.id", v.ID).Error(err)
 			return nil, err
 		}
 		router.clients[v.ID] = client
-		router.stats.Store(v.ID, true)
-		go router.watchClient(conf, v)
 	}
 	return router, nil
 }
 
 func (router *Router) Run() {
-	sl, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", router.conf.Clients.Port))
+	sl, err := net.Listen("tcp", fmt.Sprintf(":%d", router.conf.Clients.Port))
 	if err != nil {
 		log.WithField("clients.port", router.conf.Clients.Port).Error(err)
 		return
@@ -58,30 +49,8 @@ func (router *Router) Run() {
 		go router.serveSocks5(s5conn)
 	}
 }
-func (router *Router) watchClient(conf *config.ConfigGo, confClient *config.ClientGo) {
-	for {
-		client := router.clients[confClient.ID]
-		client.Run()
-		router.stats.Store(confClient.ID, false)
-		for {
-			<-router.ifNeedRestart()
-			newClient, err := NewClient(conf, confClient)
-			if err != nil {
-				log.Warn(err)
-				router.setNeedRestart()
-				continue
-			} else {
-				router.clients[confClient.ID] = newClient
-				break
-			}
-		}
-		router.stats.Store(confClient.ID, true)
-		//router.resetNeedRestart()
-	}
-}
 
 func (router *Router) serveSocks5(conn net.Conn) {
-	port := uint16(conn.RemoteAddr().(*net.TCPAddr).Port)
 	request, err := router.serveSocks5Negotiation(conn)
 	if err != nil {
 		log.Error(err)
@@ -112,27 +81,6 @@ func (router *Router) serveSocks5(conn net.Conn) {
 		}
 		return
 	}
-	stat, ok := router.stats.Load(clientKey)
-	if !ok {
-		log.WithField("client key", clientKey).Error("client not found")
-		err = conn.Close()
-		if err != nil {
-			log.Warn(err)
-		}
-		return
-	}
-	if !stat.(bool) {
-		router.setNeedRestart()
-		err = socks5.NewReply(socks5.RepConnectionRefused, socks5.ATYPIPv4, net.IPv4zero, []byte{0, 0}).WriteTo(conn)
-		if err != nil {
-			log.Warn(err)
-		}
-		err = conn.Close()
-		if err != nil {
-			log.Warn(err)
-		}
-		return
-	}
 	client := router.clients[clientKey]
 	if client == nil {
 		log.WithField("client key", clientKey).Error("client not found")
@@ -142,17 +90,10 @@ func (router *Router) serveSocks5(conn net.Conn) {
 		}
 		return
 	}
-	wsw := client.getWebsocketWriter(port)
-	_, err = wsw.writeConnect(*request)
-	if err != nil {
-		log.WithField("session", port).Error(err)
-		err = conn.Close()
-		if err != nil {
-			log.WithField("session", port).Warn(err)
-		}
-		return
-	}
-	client.accept(port, &conn)
+	msgBytes := []byte{request.Atyp}
+	msgBytes = append(msgBytes, request.DstPort...)
+	msgBytes = append(msgBytes, request.DstAddr...)
+	client.Run(msgBytes, conn)
 }
 
 func (router *Router) serveSocks5Negotiation(conn net.Conn) (*socks5.Request, error) { //select client
@@ -255,20 +196,6 @@ func (router *Router) directConect(request *socks5.Request, s5conn net.Conn) {
 	go SafeCopy(s5conn, rawConn)
 	go SafeCopy(rawConn, s5conn)
 	return
-}
-
-func (router *Router) setNeedRestart() {
-	router.mutex.Lock()
-	if len(router.needRestart) == 0 {
-		router.needRestart <- 1
-	}
-	router.mutex.Unlock()
-}
-
-func (router *Router) ifNeedRestart() chan byte {
-	defer router.mutex.RUnlock()
-	router.mutex.RLock()
-	return router.needRestart
 }
 
 func localResolve(request *socks5.Request) (*socks5.Request, error) {
