@@ -1,4 +1,4 @@
-package relaybaton
+package log
 
 import (
 	"encoding/xml"
