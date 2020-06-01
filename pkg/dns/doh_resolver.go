@@ -61,7 +61,7 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ad
 	return factory, nil
 }
 
-func (factory DoHResolverFactory) GetResolver() *net.Resolver {
+func (factory *DoHResolverFactory) GetResolver() *net.Resolver {
 	resolver := &net.Resolver{
 		StrictErrors: factory.strictErrors,
 		Dial:         factory.getDialFunction(),
@@ -69,7 +69,7 @@ func (factory DoHResolverFactory) GetResolver() *net.Resolver {
 	return resolver
 }
 
-func (factory DoHResolverFactory) getDialFunction() func(ctx context.Context, network string, address string) (net.Conn, error) {
+func (factory *DoHResolverFactory) getDialFunction() func(ctx context.Context, network string, address string) (net.Conn, error) {
 	return func(ctx context.Context, network string, address string) (net.Conn, error) {
 		conn, err := factory.dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", factory.port))
 		if err != nil {
@@ -89,7 +89,7 @@ func (factory DoHResolverFactory) getDialFunction() func(ctx context.Context, ne
 	}
 }
 
-func (factory DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
+func (factory *DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	wire, err := r.Pack()

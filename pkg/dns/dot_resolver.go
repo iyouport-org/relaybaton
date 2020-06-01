@@ -25,14 +25,14 @@ func NewDoTResolverFactory(dialer net.Dialer, serverName string, addr net.Addr, 
 	}
 }
 
-func (factory DoTResolverFactory) GetResolver() *net.Resolver {
+func (factory *DoTResolverFactory) GetResolver() *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
-		Dial:     factory.getDialFunction(),
+		Dial:     factory.GetDialFunction(),
 	}
 }
 
-func (factory DoTResolverFactory) getDialFunction() func(ctx context.Context, network, address string) (net.Conn, error) {
+func (factory *DoTResolverFactory) GetDialFunction() func(ctx context.Context, network, address string) (net.Conn, error) {
 	return func(context context.Context, _, address string) (net.Conn, error) {
 		conn, err := factory.dialer.DialContext(context, "tcp", factory.addr.String())
 		if err != nil {
