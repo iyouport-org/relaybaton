@@ -1,5 +1,9 @@
 package socks5
 
+import (
+	"relaybaton/pkg/util"
+)
+
 /*
    The SOCKS request information is sent by the client as soon as it has
    established a connection to the SOCKS server, and completed the
@@ -23,7 +27,7 @@ package socks5
              o  X'04' Host unreachable
              o  X'05' Connection refused
              o  X'06' TTL expired
-             o  X'07' Command not supported
+             o  X'07' Cmd not supported
              o  X'08' Address type not supported
              o  X'09' to X'FF' unassigned
           o  RSV    RESERVED
@@ -37,34 +41,29 @@ package socks5
    Fields marked RESERVED (RSV) must be set to X'00'.
 */
 
-const (
-	RepSucceeded                     = 0
-	RepServerFailure                 = 1
-	RepConnectionNotAllowedByRuleset = 2
-	RepNetworkUnreachable            = 3
-	RepHostUnreachable               = 4
-	RepConnectionRefused             = 5
-	RepTTLExpired                    = 6
-	RepCmdNotSupported               = 7
-	RepATypNotSupported              = 8
-)
-
 type Reply struct {
-	ver     byte
-	rep     byte
-	rsv     byte
-	aTyp    byte
+	ver byte
+	Rep
+	rsv byte
+	ATyp
 	bndAddr []byte
 	bndPort uint16
 }
 
-func NewReply(rep byte, aTyp byte, bndAddr []byte, bndPort uint16) Reply {
+func NewReply(rep Rep, aTyp ATyp, bndAddr []byte, bndPort uint16) Reply {
 	return Reply{
 		ver:     5,
-		rep:     rep,
+		Rep:     rep,
 		rsv:     0,
-		aTyp:    aTyp,
+		ATyp:    aTyp,
 		bndAddr: bndAddr,
 		bndPort: bndPort,
 	}
+}
+
+func (reply Reply) Pack() []byte {
+	b := []byte{reply.ver, reply.Rep, reply.rsv, reply.ATyp}
+	b = append(b, reply.bndAddr...)
+	b = append(b, util.Uint16ToBytes(reply.bndPort)...)
+	return b
 }

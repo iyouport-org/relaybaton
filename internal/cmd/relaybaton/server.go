@@ -5,8 +5,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
-	"relaybaton-dev/pkg/config"
-	"relaybaton-dev/pkg/core"
+	"relaybaton/pkg/config"
+	"relaybaton/pkg/core"
 )
 
 var ServerCmd = &cobra.Command{

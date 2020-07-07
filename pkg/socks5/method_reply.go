@@ -12,24 +12,20 @@ import (
    +----+--------+
 */
 
-const (
-	MethodNoAcceptable = 0xFF
-)
-
 type MethodReply struct {
-	ver    byte
-	method byte
+	ver byte
+	Method
 }
 
-func NewMethodReply(method byte) MethodReply {
+func NewMethodReply(method Method) MethodReply {
 	return MethodReply{
 		ver:    5,
-		method: method,
+		Method: method,
 	}
 }
 
 func (mr MethodReply) Encode() []byte {
-	return []byte{mr.ver, mr.method}
+	return []byte{mr.ver, mr.Method}
 }
 
 func (mr MethodReply) WriteTo(writer io.Writer) (int64, error) {

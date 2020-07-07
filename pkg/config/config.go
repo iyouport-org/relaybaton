@@ -6,8 +6,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"net"
-	"relaybaton-dev/pkg/dns"
-	formatter "relaybaton-dev/pkg/log"
+	"relaybaton/pkg/dns"
+	formatter "relaybaton/pkg/log"
 )
 
 // ConfigTOML is the struct mapped from the configuration file

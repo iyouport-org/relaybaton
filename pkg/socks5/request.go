@@ -33,22 +33,13 @@ import (
              order
 */
 
-const (
-	CmdConnect      = 1
-	CmdBind         = 2
-	CmdUDPAssociate = 3
-	ATypeIPv4       = 1
-	ATypeDomainName = 3
-	ATypeIPv6       = 4
-)
-
 type Request struct {
-	ver     byte
-	cmd     byte
-	rsv     byte
-	aTyp    byte
-	dstAddr []byte
-	dstPort uint16
+	ver byte
+	Cmd
+	rsv byte
+	ATyp
+	DstAddr []byte
+	DstPort uint16
 }
 
 func NewRequestFrom(b []byte) (request Request, err error) {
@@ -87,7 +78,7 @@ func NewRequestFrom(b []byte) (request Request, err error) {
 		log.Error(err)
 		return request, err
 	}
-	request.cmd = cmd[0]
+	request.Cmd = cmd[0]
 
 	rsv := make([]byte, 1)
 	n, err = reader.Read(rsv)
@@ -119,9 +110,9 @@ func NewRequestFrom(b []byte) (request Request, err error) {
 	if (aTyp[0] != ATypeIPv4) && (aTyp[0] != ATypeDomainName) && (aTyp[0] != ATypeIPv6) {
 		log.Warn("SOCKS5 reserved not 0")
 	}
-	request.aTyp = aTyp[0]
+	request.ATyp = aTyp[0]
 	var dstAddr []byte
-	switch request.aTyp {
+	switch request.ATyp {
 	case ATypeIPv4:
 		dstAddr = make([]byte, 4)
 		n, err = reader.Read(dstAddr)
@@ -181,7 +172,7 @@ func NewRequestFrom(b []byte) (request Request, err error) {
 		log.Error(err)
 		return request, err
 	}
-	request.dstAddr = dstAddr
+	request.DstAddr = dstAddr
 
 	dstPort := make([]byte, 2)
 	n, err = reader.Read(dstPort)
@@ -194,23 +185,7 @@ func NewRequestFrom(b []byte) (request Request, err error) {
 		log.Error(err)
 		return request, err
 	}
-	request.dstPort = binary.BigEndian.Uint16(dstPort)
+	request.DstPort = binary.BigEndian.Uint16(dstPort)
 
 	return
-}
-
-func (r Request) Cmd() byte {
-	return r.cmd
-}
-
-func (r Request) ATyp() byte {
-	return r.aTyp
-}
-
-func (r Request) DstAddr() []byte {
-	return r.dstAddr
-}
-
-func (r Request) DstPort() uint16 {
-	return r.dstPort
 }

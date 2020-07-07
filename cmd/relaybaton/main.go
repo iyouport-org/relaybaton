@@ -5,7 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"os"
-	"relaybaton-dev/internal/cmd/relaybaton"
+	"relaybaton/internal/cmd/relaybaton"
 )
 
 func main() {

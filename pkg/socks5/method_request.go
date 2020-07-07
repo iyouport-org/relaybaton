@@ -21,16 +21,10 @@ import (
    appear in the methods field.
 */
 
-const (
-	MethodNoAuthRequired   = 0
-	MethodGSSAPI           = 1
-	MethodUsernamePassword = 2
-)
-
 type MethodRequest struct {
 	ver      byte
 	nMethods byte
-	methods  []byte
+	methods  []Method
 }
 
 func NewMethodRequestFrom(b []byte) (mr MethodRequest, err error) {
@@ -81,6 +75,6 @@ func NewMethodRequestFrom(b []byte) (mr MethodRequest, err error) {
 	return
 }
 
-func (mr MethodRequest) Methods() []byte {
+func (mr MethodRequest) Methods() []Method {
 	return mr.methods
 }
