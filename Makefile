@@ -60,7 +60,7 @@ endif
 ##############################
 
 relaybaton: go
-	GOROOT=$(GOROOT_LOCAL) go build -o $(PRJ_DIR)/bin/relaybaton $(PRJ_DIR)/cmd/relaybaton/main.go
+	GOROOT="$(GOROOT_LOCAL)" go build -o $(PRJ_DIR)/bin/relaybaton $(PRJ_DIR)/cmd/relaybaton/main.go
 
 # Default target must build Go
 .PHONY: go
