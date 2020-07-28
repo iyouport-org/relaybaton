@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/gorilla/websocket"
+	"github.com/fasthttp/websocket"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
 	"net"

@@ -12,7 +12,7 @@ Client connection status
 import (
 	"context"
 	"fmt"
-	"github.com/gorilla/websocket"
+	"github.com/fasthttp/websocket"
 	"github.com/panjf2000/gnet"
 	"github.com/panjf2000/gnet/pool/goroutine"
 	log "github.com/sirupsen/logrus"

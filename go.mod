@@ -8,12 +8,12 @@ require (
 	github.com/cloudflare/tls-tris v0.0.0-20190503140226-b99e30c5ee6d
 	github.com/denisenkom/go-mssqldb v0.0.0-20200620013148-b91950f658ec // indirect
 	github.com/emirpasic/gods v1.12.0
+	github.com/fasthttp/websocket v1.4.3
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-playground/validator/v10 v10.3.0 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.5.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
-	github.com/gorilla/websocket v1.4.2
 	github.com/henrydcase/nobs v0.0.0-20200516223741-2500d74484f2 // indirect
 	github.com/jinzhu/gorm v1.9.14
 	github.com/jinzhu/now v1.1.1 // indirect
@@ -42,7 +42,7 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.0
-	github.com/valyala/fasthttp v1.14.0 // indirect
+	github.com/valyala/fasthttp v1.14.0
 	go.uber.org/fx v1.13.0
 	go.uber.org/goleak v1.0.0 // indirect
 	go.uber.org/multierr v1.5.0 // indirect
