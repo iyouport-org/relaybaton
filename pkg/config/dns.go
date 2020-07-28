@@ -42,7 +42,7 @@ func (dnst *dnsTOML) Init() (dnsg *dnsGo, err error) {
 		}
 	case "doh":
 		dnsg.Type = DNSTypeDoH
-		dnsg.Addr, err = net.ResolveTCPAddr("ip", dnst.Addr)
+		dnsg.Addr, err = net.ResolveIPAddr("ip", dnst.Addr)
 		if err != nil {
 			log.WithField("dns.addr", dnst.Addr).Error(err)
 			return nil, err
