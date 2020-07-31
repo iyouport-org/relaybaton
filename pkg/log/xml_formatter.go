@@ -45,7 +45,6 @@ func (fmter XMLFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		}
 		e.Children = append(e.Children, elementMsg)
 	}
-
 	for k, v := range entry.Data {
 		switch v := v.(type) {
 		case error:

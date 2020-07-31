@@ -54,6 +54,7 @@ func (server *Server) Run() {
 
 func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 	if !server.Authenticate(ctx) {
+		server.redirect(ctx)
 		return
 	}
 	var upgrader = websocket.FastHTTPUpgrader{
@@ -122,9 +123,39 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 }
 
 func (server *Server) Authenticate(ctx *fasthttp.RequestCtx) bool {
-	if ctx.Request.Header.Peek("addr") == nil {
+	if ctx.Request.Header.Peek("addr") == nil || ctx.Request.Header.Peek("username") == nil || ctx.Request.Header.Peek("password") == nil {
 		log.Debug("false")
 		return false
 	}
-	return true
+	username := string(ctx.Request.Header.Peek("username"))
+	password := string(ctx.Request.Header.Peek("password"))
+	correctPassword, err := server.getPassword(username)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+	return password == correctPassword
+}
+
+func (server *Server) getPassword(username string) (string, error) {
+	db := server.DB.DB
+	db.AutoMigrate(&User{})
+	var user User
+	err := db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		log.WithField("username", username).Error(err)
+		return "", err
+	}
+	return user.Password, nil
+}
+
+func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
+	newReq := fasthttp.AcquireRequest()
+	ctx.Request.CopyTo(newReq)
+	newReq.Header.SetHost(server.Server.Pretend.String() + string(ctx.Request.RequestURI()))
+	err := fasthttp.Do(newReq, &ctx.Response)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 }

@@ -25,4 +25,6 @@ func init() {
 	if err != nil {
 		log.Error(err)
 	}
+	log.SetReportCaller(true)
+	log.SetLevel(log.TraceLevel)
 }

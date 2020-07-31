@@ -62,10 +62,26 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 			ServerName:     conn.clientConf.Server,
 		},
 		NetDial: func(network, addr string) (net.Conn, error) {
-			return net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
+			c, err := net.DialTimeout(network, addr, 15*time.Second)
+			if err != nil {
+				return nil, err
+			}
+			err = c.(*net.TCPConn).SetKeepAlive(true)
+			if err != nil {
+				return nil, err
+			}
+			return c, nil
 		},
 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
+			c, err := net.DialTimeout(network, addr, 15*time.Second)
+			if err != nil {
+				return nil, err
+			}
+			err = c.(*net.TCPConn).SetKeepAlive(true)
+			if err != nil {
+				return nil, err
+			}
+			return c, nil
 		},
 		EnableCompression: true,
 		HandshakeTimeout:  time.Minute,
@@ -126,7 +142,7 @@ func (conn *Conn) buildHeader() (http.Header, error) {
 }
 
 func GetESNI(domain string) (*tls.ESNIKeys, error) {
-	txt, err := net.LookupTXT("_esni." + domain)
+	txt, err := net.DefaultResolver.LookupTXT(context.Background(), "_esni."+domain)
 	if err != nil {
 		log.WithField("domain", domain).Error(err)
 		return nil, err

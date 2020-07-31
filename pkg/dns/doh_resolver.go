@@ -90,6 +90,7 @@ func (factory *DoHResolverFactory) getDialFunction() func(ctx context.Context, n
 }
 
 func (factory *DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
+	//log.Debug(r.String())	//test
 	m := new(dns.Msg)
 	m.SetReply(r)
 	wire, err := r.Pack()
@@ -127,6 +128,7 @@ func (factory *DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Ms
 		log.WithField("body", body).Error(err)
 		return
 	}
+	//log.Debug(m.String())	//test
 	err = w.WriteMsg(m)
 	if err != nil {
 		log.Error(err)
