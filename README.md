@@ -24,7 +24,7 @@ go get github.com/iyouport-org/relaybaton
 ```CGO_ENABLED=1``` should be set in cross-compiling
 
 ```bash
-tls-tris/_dev/go.sh build -o relaybaton github.com/iyouport-org/relaybaton/main
+make
 ```
 
 ## Deployment
@@ -39,12 +39,12 @@ A MaxMind GeoLite2 Country database should be provided for GeoIP-based routing.
 ```sudo``` is required for listening on port 80
 
 ```bash
-sudo relaybation server
+sudo relaybation server --config /path/to/server/config.toml
 ```
 
 ### Client
 ```bash
-relaybaton client
+relaybation client --config /path/to/client/config.toml
 ```
 
 A local SOCKS5 proxy server will listen on the local port which is given in the configuration file.
@@ -174,16 +174,21 @@ database="relaybaton.db"
 |      db.port      |  Integer  |                         uint16                         |               port for database connection               |
 |    db.database    |  String   |                         string                         |                     name of database                     |
 
-See wiki for detailed explanation.
-
 ## Built With
 
-* [github.com/sirupsen/logrus](https://github.com/sirupsen/logrus) - Structured, pluggable logging for Go.
-* [github.com/gorilla/websocket](https://github.com/gorilla/websocket) -  A fast, well-tested and widely used WebSocket implementation for Go.
-* [github.com/spf13/viper](https://github.com/spf13/viper) - Go configuration with fangs.
-* [github.com/jinzhu/gorm](https://github.com/jinzhu/gorm) - The fantastic ORM library for Golang, aims to be developer friendly.
-* [github.com/oschwald/geoip2-golang](https://github.com/oschwald/geoip2-golang) - Unofficial MaxMind GeoIP2 Reader for Go.
-* [github.com/miekg/dns](https://github.com/miekg/dns) - DNS library in Go.
+* [github.com/cloudflare/tls-tris](https://github.com/cloudflare/tls-tris/tree/pwu/esni) - crypto/tls, now with 100% more 1.3.
+* [github.com/emirpasic/gods](https://github.com/emirpasic/gods) - Implementation of various data structures and algorithms in Go.
+* [github.com/eycorsican/go-tun2socks](https://github.com/eycorsican/go-tun2socks) - A tun2socks implementation written in Go.
+* [github.com/fasthttp/websocket](https://github.com/fasthttp/websocket) - This fork adds fasthttp support to the latest version of gorilla/websocket.
+* [github.com/jinzhu/gorm](https://github.com/jinzhu/gorm) - The fantastic ORM library for Golang.
+* [github.com/miekg/dns](https://github.com/miekg/dns) - Complete and usable DNS library.
+* [github.com/oschwald/geoip2-golang](https://github.com/oschwald/geoip2-golang) - This library reads MaxMind GeoLite2 and GeoIP2 databases.
+* [github.com/panjf2000/gnet](https://github.com/panjf2000/gnet) - An event-driven networking framework that is fast and lightweight.
+* [github.com/sirupsen/logrus](https://github.com/sirupsen/logrus) - A structured logger for Go.
+* [github.com/spf13/cobra](https://github.com/spf13/cobra) - Cobra is both a library for creating powerful modern CLI applications as well as a program to generate applications and command files.
+* [github.com/spf13/viper](https://github.com/spf13/viper) - A complete configuration solution for Go applications including 12-Factor apps.
+* [github.com/valyala/fasthttp](https://github.com/valyala/fasthttp) - Fast HTTP implementation for Go.
+* [go.uber.org/fx](https://github.com/uber-go/fx) - An application framework for Go.
 
 
 ## Versioning
@@ -202,5 +207,4 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE.m
 
 ## Acknowledgments
 
-* [github.com/txthinking/socks5](https://github.com/txthinking/socks5) - SOCKS Protocol Version 5 Library in Go
 * Cloudflare
