@@ -10,6 +10,7 @@ require (
 	github.com/eycorsican/go-tun2socks v1.16.9
 	github.com/fasthttp/websocket v1.4.3
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/google/gopacket v1.1.18
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/henrydcase/nobs v0.0.0-20200516223741-2500d74484f2 // indirect
 	github.com/jinzhu/gorm v1.9.15

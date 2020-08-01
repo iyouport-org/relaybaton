@@ -40,6 +40,7 @@ func NewServer(lc fx.Lifecycle, conf *config.ConfigGo) *Server {
 }
 
 func (server *Server) Run() {
+	server.DB.DB.AutoMigrate(&User{})
 	ln, err := reuseport.Listen("tcp4", ":80")
 	if err != nil {
 		log.Fatal("error in reuseport listener: %s", err)
