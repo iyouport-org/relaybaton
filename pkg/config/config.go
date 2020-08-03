@@ -1,8 +1,7 @@
 package config
 
 import (
-	"errors"
-	"fmt"
+	"github.com/go-playground/validator/v10"
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -13,25 +12,28 @@ import (
 
 // ConfigTOML is the struct mapped from the configuration file
 type ConfigTOML struct {
-	Log     logTOML     `mapstructure:"log"`
-	DNS     dnsTOML     `mapstructure:"dns"`
-	Clients clientsTOML `mapstructure:"clients"`
-	Routes  routesTOML  `mapstructure:"routes"`
-	Server  serverTOML  `mapstructure:"server"`
-	DB      dbTOML      `mapstructure:"db"`
+	Log    LogTOML    `mapstructure:"log" toml:"log" validate:"required"`
+	DNS    DNSToml    `mapstructure:"dns" toml:"dns" validate:"required"`
+	Client ClientTOML `mapstructure:"client" toml:"client" `
+	Server serverTOML `mapstructure:"server" toml:"server"  `
+	DB     dbTOML     `mapstructure:"db" toml:"db" `
 }
 
 type ConfigGo struct {
-	toml    *ConfigTOML
-	Log     *logGo     //client,server
-	DNS     *dnsGo     //client,server
-	Clients *clientsGo //client
-	Routes  *routesGo  //client
-	Server  *serverGo  //server
-	DB      *dbGo      //server
+	toml   *ConfigTOML
+	Log    *LogGo    //client,server
+	DNS    *DNSGo    //client,server
+	Client *ClientGo //client
+	Server *serverGo //server
+	DB     *dbGo     //server
 }
 
 func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
+	validate := validator.New()
+	err = validate.Struct(mc)
+	if err != nil {
+		return nil, err
+	}
 	cg = &ConfigGo{}
 	cg.toml = mc
 	cg.Log, err = mc.Log.Init()
@@ -47,15 +49,35 @@ func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
 	return cg, nil
 }
 
+func (conf *ConfigGo) Save(filename string) error {
+	viper.Set("client.port", conf.toml.Client.Port)
+	viper.Set("client.server", conf.toml.Client.Server)
+	viper.Set("client.username", conf.toml.Client.Username)
+	viper.Set("client.password", conf.toml.Client.Password)
+	viper.Set("client.proxy_all", conf.toml.Client.ProxyAll)
+	viper.Set("dns.type", conf.toml.DNS.Type)
+	viper.Set("dns.server", conf.toml.DNS.Server)
+	viper.Set("dns.addr", conf.toml.DNS.Addr)
+	viper.Set("log.file", conf.toml.Log.File)
+	viper.Set("log.level", conf.toml.Log.Level)
+	return viper.WriteConfigAs(filename)
+	/*file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	encoder := toml.NewEncoder(file)
+	err = encoder.Encode(conf)
+	if err != nil {
+		return err
+	}
+	return nil*/
+}
+
 func NewConf() *ConfigGo {
-	v := viper.New()
+	v := viper.GetViper()
 	if viper.GetString("config") != "" {
 		logrus.Debug(viper.GetString("config"))
 		v.SetConfigFile(viper.GetString("config"))
-	} else {
-		v.SetConfigName("config")
-		v.SetConfigType("toml")
-		v.AddConfigPath(".")
 	}
 	v.AutomaticEnv()
 	if err := v.ReadInConfig(); err != nil {
@@ -77,22 +99,10 @@ func NewConf() *ConfigGo {
 
 func NewConfClient() (conf *ConfigGo, err error) {
 	conf = NewConf()
-	conf.Clients, err = conf.toml.Clients.Init()
+	conf.Client, err = conf.toml.Client.Init()
 	if err != nil {
 		logrus.Error(err)
 		return nil, err
-	}
-	conf.Routes, err = conf.toml.Routes.Init()
-	if err != nil {
-		logrus.Error(err)
-		return nil, err
-	}
-	for _, v := range conf.Routes.Route {
-		if conf.Clients.Client[v.Target] == nil && v.Target != "default" {
-			err = errors.New(fmt.Sprintf("target %s do not exist", v.Target))
-			logrus.WithField("routes.route.target", v.Target).Error(err)
-			return nil, err
-		}
 	}
 	return conf, nil
 }

@@ -21,12 +21,12 @@ const (
 )
 
 type dbTOML struct {
-	Type     string `mapstructure:"type"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	Database string `mapstructure:"database"`
+	Type     string `mapstructure:"type"  toml:"type" `
+	Username string `mapstructure:"username"  toml:"username" `
+	Password string `mapstructure:"password"  toml:"password" `
+	Host     string `mapstructure:"host"  toml:"host" `
+	Port     int    `mapstructure:"port"  toml:"port" `
+	Database string `mapstructure:"database"  toml:"database" `
 }
 
 type dbGo struct {
