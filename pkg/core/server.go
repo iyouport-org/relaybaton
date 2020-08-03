@@ -40,6 +40,7 @@ func NewServer(lc fx.Lifecycle, conf *config.ConfigGo) *Server {
 }
 
 func (server *Server) Run() {
+	server.DB.DB.AutoMigrate(&User{})
 	ln, err := reuseport.Listen("tcp4", ":80")
 	if err != nil {
 		log.Fatal("error in reuseport listener: %s", err)
@@ -152,8 +153,15 @@ func (server *Server) getPassword(username string) (string, error) {
 func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
 	newReq := fasthttp.AcquireRequest()
 	ctx.Request.CopyTo(newReq)
-	newReq.Header.SetHost(server.Server.Pretend.String() + string(ctx.Request.RequestURI()))
-	err := fasthttp.Do(newReq, &ctx.Response)
+	newReq.SetHost(server.Server.Pretend.Host)
+	newReq.SetRequestURI(server.Server.Pretend.String() + string(ctx.Request.RequestURI()))
+	newReq.WriteTo(log.StandardLogger().Writer())
+	rep := fasthttp.AcquireResponse()
+	err := fasthttp.Do(newReq, rep)
+
+	//rep.WriteTo(log.StandardLogger().Writer())
+	newReq.Header.Header()
+	rep.CopyTo(&ctx.Response)
 	if err != nil {
 		log.Error(err)
 		return

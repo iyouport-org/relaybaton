@@ -1,43 +1,15 @@
-[log]
-file="./log.xml"
-level="trace"
+[client]
+port = 1080
+server = "example.com"
+username = "username"
+password = "password"
+proxy_all = true
 
 [dns]
-type="default"
-server="cloudflare-dns.com"
-addr="1.1.1.1:853"
-local_resolve=true
+type = "doh"
+server = "cloudflare-dns.com"
+addr = "1.1.1.1"
 
-[clients]
-port=1081
-
-    [[clients.client]]
-    id="2"
-    server="exmaple.com"
-    username="username"
-    password="password"
-    esni=true
-    timeout=15
-
-[routes]
-geoip_file="third_party/GeoLite2-Country.mmdb"
-
-    [[routes.route]]
-    type="geoip"
-    cond="CN"
-    target="default"
-
-    [[routes.route]]
-    type="domain"
-    cond="www\\.baidu\\.com"
-    target="default"
-
-    [[routes.route]]
-    type="domain"
-    cond="www\\.ip138\\.com"
-    target="default"
-
-    [[routes.route]]
-    type="default"
-    cond=""
-    target="2"
+[log]
+file = "./log.xml"
+level = "trace"

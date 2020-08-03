@@ -55,7 +55,7 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool) *Cl
 }
 
 func (client *Client) Run() error {
-	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Clients.Port), gnet.WithMulticore(true), gnet.WithReusePort(true), gnet.WithLogger(log.StandardLogger()))
+	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port), gnet.WithMulticore(true), gnet.WithReusePort(true), gnet.WithLogger(log.StandardLogger()))
 	if err != nil {
 		log.Error(err)
 	}
@@ -174,7 +174,7 @@ func (client *Client) HandleMethodRequest(data []byte) (b []byte, action gnet.Ac
 }
 
 func (client *Client) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
-	conn := NewConn(c, client.Clients.Client["2"])
+	conn := NewConn(c, client.Client)
 	client.conns.Put(conn)
 	return
 }

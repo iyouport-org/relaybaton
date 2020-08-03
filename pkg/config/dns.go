@@ -13,24 +13,21 @@ const (
 	DNSTypeDoH     DNSType = "doh"
 )
 
-type dnsTOML struct {
-	Type         string `mapstructure:"type"`
-	Server       string `mapstructure:"server"`
-	Addr         string `mapstructure:"addr"`
-	LocalResolve bool   `mapstructure:"local_resolve"`
+type DNSToml struct {
+	Type   string `mapstructure:"type" toml:"type" validate:"required"`
+	Server string `mapstructure:"server" toml:"server" validate:"required,hostname"`
+	Addr   string `mapstructure:"addr" toml:"addr" validate:"required,ip|tcp_addr"`
 }
 
-type dnsGo struct {
-	Type         DNSType
-	Server       string
-	Addr         net.Addr
-	LocalResolve bool
+type DNSGo struct {
+	Type   DNSType
+	Server string
+	Addr   net.Addr
 }
 
-func (dnst *dnsTOML) Init() (dnsg *dnsGo, err error) {
-	dnsg = &dnsGo{
-		Server:       dnst.Server,
-		LocalResolve: dnst.LocalResolve,
+func (dnst *DNSToml) Init() (dnsg *DNSGo, err error) {
+	dnsg = &DNSGo{
+		Server: dnst.Server,
 	}
 	switch dnst.Type {
 	case "dot":

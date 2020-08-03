@@ -62,7 +62,7 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 			ServerName:     conn.clientConf.Server,
 		},
 		NetDial: func(network, addr string) (net.Conn, error) {
-			c, err := net.DialTimeout(network, addr, 15*time.Second)
+			c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
 			if err != nil {
 				return nil, err
 			}
@@ -70,10 +70,13 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 			if err != nil {
 				return nil, err
 			}
-			return c, nil
+			return &TCPSegmentConn{
+				segmentOn: true,
+				TCPConn:   c.(*net.TCPConn),
+			}, nil
 		},
 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			c, err := net.DialTimeout(network, addr, 15*time.Second)
+			c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
 			if err != nil {
 				return nil, err
 			}
@@ -81,7 +84,10 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 			if err != nil {
 				return nil, err
 			}
-			return c, nil
+			return &TCPSegmentConn{
+				segmentOn: true,
+				TCPConn:   c.(*net.TCPConn),
+			}, nil
 		},
 		EnableCompression: true,
 		HandshakeTimeout:  time.Minute,

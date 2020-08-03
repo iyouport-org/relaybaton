@@ -1,41 +1,28 @@
 package config
 
-import (
-	"errors"
-	log "github.com/sirupsen/logrus"
-	"time"
-)
-
-type clientTOML struct {
-	ID       string `mapstructure:"id"`
-	Server   string `mapstructure:"server"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	ESNI     bool   `mapstructure:"bool"`
-	Timeout  int    `mapstructure:"timeout"`
+type ClientTOML struct {
+	Port     int    `mapstructure:"port" toml:"port" validate:"numeric"`
+	Server   string `mapstructure:"server"  toml:"server" validate:"hostname"`
+	Username string `mapstructure:"username" toml:"username" `
+	Password string `mapstructure:"password" toml:"password" `
+	ProxyAll bool   `mapstructure:"proxy_all" toml:"proxy_all" `
 }
 
 type ClientGo struct {
-	ID       string
+	Port     uint16
 	Server   string
 	Username string
 	Password string
-	ESNI     bool
-	Timeout  time.Duration
+	ProxyAll bool
 }
 
-func (ct *clientTOML) Init() (cg *ClientGo, err error) {
-	if ct.ID == "default" {
-		err = errors.New("client id cannot be 'default'")
-		log.Error(err)
-		return nil, err
-	}
+func (ct *ClientTOML) Init() (cg *ClientGo, err error) {
+
 	return &ClientGo{
-		ID:       ct.ID,
+		Port:     uint16(ct.Port),
 		Server:   ct.Server,
 		Username: ct.Username,
 		Password: ct.Password,
-		ESNI:     ct.ESNI,
-		Timeout:  time.Duration(int64(ct.Timeout) * int64(time.Second)),
+		ProxyAll: ct.ProxyAll,
 	}, nil
 }

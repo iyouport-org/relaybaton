@@ -8,12 +8,12 @@ import (
 )
 
 type serverTOML struct {
-	Port     int    `mapstructure:"port"`
-	Pretend  string `mapstructure:"pretend"`
-	Timeout  int    `mapstructure:"timeout"`
-	Secure   bool   `mapstructure:"secure"`
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
+	Port     int    `mapstructure:"port" toml:"port"`
+	Pretend  string `mapstructure:"pretend" toml:"pretend" `
+	Timeout  int    `mapstructure:"timeout" toml:"timeout"`
+	Secure   bool   `mapstructure:"secure" toml:"secure"`
+	CertFile string `mapstructure:"cert_file" toml:"cert_file"`
+	KeyFile  string `mapstructure:"key_file" toml:"key_file"`
 }
 
 type serverGo struct {
