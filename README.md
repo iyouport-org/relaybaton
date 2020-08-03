@@ -1,5 +1,5 @@
 # relaybaton
-A pluggable transport to circumvent Internet censorship
+A pluggable transport to circumvent Internet censorship with Encrypted SNI.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GoDoc](https://godoc.org/github.com/iyouport-org/relaybaton?status.svg)](https://godoc.org/github.com/iyouport-org/relaybaton)
@@ -8,10 +8,6 @@ A pluggable transport to circumvent Internet censorship
 ## Getting Started
 
 ### Prerequisites
-
-For supporting ESNI features, the [pwu/esni](https://github.com/cloudflare/tls-tris/tree/pwu/esni) branch of [cloudflare/tls-tris](https://github.com/cloudflare/tls-tris) should be used in building instead of the default ```go build```
-
-See [tls-tris/README.md](https://github.com/cloudflare/tls-tris/blob/pwu/esni/README.md) for instructions of building tls-tris.
 
 ### Install
 
@@ -56,72 +52,21 @@ A local SOCKS5 proxy server will listen on the local port which is given in the 
 ### Example
 
 ```toml
-[log]
-file="./log.xml"
-level="error"
+[client]
+port = 1080
+server = "example.com"
+username = "username"
+password = "password"
+proxy_all = true
 
 [dns]
-type="dot"
-server="cloudflare-dns.com"
-addr="1.0.0.1:853"
-local_resolve=true
+type = "doh"
+server = "cloudflare-dns.com"
+addr = "1.1.1.1"
 
-[clients]
-port=1081
-
-    [[clients.client]]
-    id="1"
-    server="example.com"
-    username="username"
-    password="password"
-    esni=true
-    timeout=15
-
-    [[clients.client]]
-    id="2"
-    server="example2.com"
-    username="username"
-    password="password"
-    esni=true
-    timeout=15
-
-[routes]
-geoip_file="GeoLite2-Country.mmdb"
-
-    [[routes.route]]
-    type="geoip"
-    cond="CN"
-    target="1"
-
-    [[routes.route]]
-    type="domain"
-    cond="www/.example/.com"
-    target="2"
-
-    [[routes.route]]
-    type="ipv4"
-    cond="1.1.1.1"
-    target="2"
-
-    [[routes.route]]
-    type="ipv6"
-    cond="2001:DB8:2de:0:0:0:0:e13"
-    target="2"
-
-    [[routes.route]]
-    type="ipv4subnet"
-    cond="1.1.1.1/4"
-    target="2"
-
-    [[routes.route]]
-    type="ipv6subnet"
-    cond="2001:DB8:2de:0:0:0:0:e13/4"
-    target="2"
-
-    [[routes.route]]
-    type="default"
-    cond=""
-    target="1"
+[log]
+file = "./log.xml"
+level = "trace"
 
 [server]
 port=80
@@ -142,37 +87,30 @@ database="relaybaton.db"
 
 ### Description of the fields
 
-|       Field       | TOML Type |                        Go Type                         |                       Description                        |
-| :---------------: | :-------: | :----------------------------------------------------: | :------------------------------------------------------: |
-|     log.file      |  String   |                        os.File                         |                   filename of log file                   |
-|     log.level     |  String   |        github.com/sirupsen/logrus logrus.Level         |                minimum log level to write                |
-|     dns.type      |  String   |   github.com/iyouport-org/relaybaton config.DNSType    |                   type of DNS resolver                   |
-|    dns.server     |  String   |                         string                         |              server name of the DNS server               |
-|     dns.addr      |  String   |                        net.Addr                        |               IP address of the DNS server               |
-| dns.local_resolve |  Boolean  |                          bool                          |             if domain names resolved locally             |
-|   clients.port    |  Integer  |                         uint16                         |             local port that client listen to             |
-|     client.id     |  Integer  |                         string                         |                     ID of the client                     |
-|   client.server   |  String   |                         string                         |                domain name of the server                 |
-|  client.username  |  String   |                         string                         |                  username of the client                  |
-|  client.password  |  String   |                         string                         |                  password of the client                  |
-|    client.esni    |  Boolean  |                          bool                          |                     if ESNI enabled                      |
-|  client.timeout   |  Integer  |                     time.Duration                      |                 timeout for no response                  |
-| routes.geoip_file |  String   |     github.com/oschwald/geoip2-golang geoip.Reader     |                filename of GeoIP database                |
-|    route.type     |  String   |  github.com/iyouport-org/relaybaton config.routeType   |                type of routing condition                 |
-|    route.cond     |  String   | []string \|\| regexp.Regexp \|\| net.IP \|\| net.IPNet |                   condition of routing                   |
-|   route.target    |  String   |                         string                         |              target client if condition met              |
-|    server.port    |  Integer  |                         uint16                         |                port that server listen to                |
-|  server.pretend   |  String   |                        url.URL                         | domain name of the website that the server pretend to be |
-|  server.timeout   |  Integer  |                     time.Duration                      |                 timeout for no response                  |
-|   server.secure   |  Boolean  |                          bool                          |              if the server running with TLS              |
-| server.cert_file  |  String   |                      os.FileInfo                       |                cert file of a TLS server                 |
-|  server.key_file  |  String   |                      os.FileInfo                       |                 key file of a TLS server                 |
-|      db.type      |  String   |    github.com/iyouport-org/relaybaton config.dbType    |                   type of the database                   |
-|    db.username    |  String   |                         string                         |             username for database connection             |
-|    db.password    |  String   |                         string                         |             password for database connection             |
-|      db.host      |  String   |                         string                         |             hostname for database connection             |
-|      db.port      |  Integer  |                         uint16                         |               port for database connection               |
-|    db.database    |  String   |                         string                         |                     name of database                     |
+|      Field       | TOML Type |                      Go Type                      |                       Description                        |
+| :--------------: | :-------: | :-----------------------------------------------: | :------------------------------------------------------: |
+|     log.file     |  String   |                      os.File                      |                   filename of log file                   |
+|    log.level     |  String   |      github.com/sirupsen/logrus logrus.Level      |                minimum log level to write                |
+|     dns.type     |  String   | github.com/iyouport-org/relaybaton config.DNSType |                   type of DNS resolver                   |
+|    dns.server    |  String   |                      string                       |              server name of the DNS server               |
+|     dns.addr     |  String   |                     net.Addr                      |               IP address of the DNS server               |
+|   client.port    |  Integer  |                      uint16                       |             local port that client listen to             |
+|  client.server   |  String   |                      string                       |                domain name of the server                 |
+| client.username  |  String   |                      string                       |                  username of the client                  |
+| client.password  |  String   |                      string                       |                  password of the client                  |
+| client.proxy_all |  Boolean  |                       bool                        |                   if proxy all traffic                   |
+|   server.port    |  Integer  |                      uint16                       |                port that server listen to                |
+|  server.pretend  |  String   |                      url.URL                      | domain name of the website that the server pretend to be |
+|  server.timeout  |  Integer  |                   time.Duration                   |                 timeout for no response                  |
+|  server.secure   |  Boolean  |                       bool                        |              if the server running with TLS              |
+| server.cert_file |  String   |                    os.FileInfo                    |                cert file of a TLS server                 |
+| server.key_file  |  String   |                    os.FileInfo                    |                 key file of a TLS server                 |
+|     db.type      |  String   | github.com/iyouport-org/relaybaton config.dbType  |                   type of the database                   |
+|   db.username    |  String   |                      string                       |             username for database connection             |
+|   db.password    |  String   |                      string                       |             password for database connection             |
+|     db.host      |  String   |                      string                       |             hostname for database connection             |
+|     db.port      |  Integer  |                      uint16                       |               port for database connection               |
+|   db.database    |  String   |                      string                       |                     name of database                     |
 
 ## Built With
 
@@ -189,7 +127,9 @@ database="relaybaton.db"
 * [github.com/spf13/viper](https://github.com/spf13/viper) - A complete configuration solution for Go applications including 12-Factor apps.
 * [github.com/valyala/fasthttp](https://github.com/valyala/fasthttp) - Fast HTTP implementation for Go.
 * [go.uber.org/fx](https://github.com/uber-go/fx) - An application framework for Go.
-
+* [github.com/andlabs/ui](https://github.com/andlabs/ui) - A library that aims to provide simple GUI software development in Go.
+* [github.com/go-playground/validator](https://github.com/go-playground/validator) - Validator implements value validations for structs and individual fields based on tags.
+* [github.com/google/gopacket](https://github.com/google/gopacket) - This library provides packet decoding capabilities for Go.
 
 ## Versioning
 
