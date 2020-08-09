@@ -21,6 +21,7 @@ import (
 	"relaybaton/pkg/config"
 	"relaybaton/pkg/socks5"
 	"strconv"
+	"sync"
 )
 
 type Client struct {
@@ -30,24 +31,28 @@ type Client struct {
 	*goroutine.Pool
 	conns    *Map
 	shutdown chan byte
+	router   *Router
 }
 
-func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool) *Client {
+func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, router *Router) *Client {
 	client := &Client{
 		Lifecycle: lc,
 		ConfigGo:  conf,
 		Pool:      pool,
 		conns:     NewMap(),
 		shutdown:  make(chan byte, 10),
+		router:    router,
 	}
 
 	client.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			log.Debug("start")
+
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			log.Debug("stop")
+			client.shutdown <- 0x00
 			return nil
 		},
 	})
@@ -63,6 +68,17 @@ func (client *Client) Run() error {
 }
 
 func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
+	var once sync.Once
+	go once.Do(func() {
+		if !client.Client.ProxyAll {
+			err := client.router.Update()
+			if err != nil {
+				log.Error(err)
+				return
+			}
+		}
+	})
+
 	select {
 	case <-client.shutdown:
 		action = gnet.Shutdown
@@ -114,31 +130,56 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 				return
 			}
 			conn.cmd = request.Cmd
-			resp, err := conn.DialWs(request)
-			if err != nil {
-				log.Error(err)
-				action = gnet.Close
-				return
+
+			if client.router.Select(c.RemoteAddr().(*net.TCPAddr).IP) {
+				resp, err := conn.DialWs(request)
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				repStr := resp.Get("reply")
+				repCode, err := strconv.Atoi(repStr)
+				if err != nil {
+					log.WithField("rep", repStr).Error(err)
+					action = gnet.Close
+					return
+				}
+				reply := socks5.NewReply(byte(repCode), socks5.ATypeIPv4, net.IPv4(127, 0, 0, 1).To4(), client.Client.Port)
+				out = reply.Pack()
+				err = client.Submit(conn.Run)
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				conn.status = StatusAccepted
+				return out, gnet.None
+			} else {
+				conn.tcpConn, err = net.Dial("tcp", conn.dstAddr.String())
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				reply := socks5.NewReply(socks5.RepSucceeded, socks5.ATypeIPv4, net.IPv4(127, 0, 0, 1).To4(), client.Client.Port)
+				out = reply.Pack()
+				err = client.Submit(conn.DirectConnect)
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				conn.status = StatusAccepted
+				return out, gnet.None
 			}
-			repStr := resp.Get("reply")
-			repCode, err := strconv.Atoi(repStr)
-			if err != nil {
-				log.WithField("rep", repStr).Error(err)
-				action = gnet.Close
-				return
-			}
-			reply := socks5.NewReply(byte(repCode), socks5.ATypeIPv4, net.IPv4(127, 0, 0, 1).To4(), 1081)
-			out = reply.Pack()
-			err = client.Submit(conn.Run)
-			if err != nil {
-				log.Error(err)
-				action = gnet.Close
-				return
-			}
-			conn.status = StatusAccepted
-			return out, gnet.None
 		case StatusAccepted:
-			err := conn.remoteConn.WriteMessage(websocket.BinaryMessage, frame)
+			var err error
+			if client.router.Select(c.RemoteAddr().(*net.TCPAddr).IP) {
+				err = conn.remoteConn.WriteMessage(websocket.BinaryMessage, frame)
+			} else {
+				_, err = conn.tcpConn.Write(frame)
+			}
 			if err != nil {
 				log.Error(err)
 				action = gnet.Close
@@ -192,6 +233,13 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 				log.Error(cErr)
 			}
 		}
+		if conn.tcpConn != nil {
+			cErr := conn.tcpConn.Close()
+			if cErr != nil {
+				log.Error(cErr)
+			}
+		}
+		client.router.RemoveCache(conn.dstAddr.(*net.TCPAddr).IP)
 	}
 	client.conns.Delete(key)
 	return
@@ -202,6 +250,6 @@ func (client *Client) OnShutdown(svr gnet.Server) {
 	client.Pool.Release()
 }
 
-func (client *Client) Shutdown() {
-	client.shutdown <- 0x00
+func updateGeoIP() {
+
 }

@@ -12,11 +12,11 @@ import (
 
 // ConfigTOML is the struct mapped from the configuration file
 type ConfigTOML struct {
-	Log    LogTOML    `mapstructure:"log" toml:"log" validate:"required"`
-	DNS    DNSToml    `mapstructure:"dns" toml:"dns" validate:"required"`
-	Client ClientTOML `mapstructure:"client" toml:"client" `
-	Server serverTOML `mapstructure:"server" toml:"server"  `
-	DB     dbTOML     `mapstructure:"db" toml:"db" `
+	Log    *LogTOML    `mapstructure:"log" toml:"log" validate:"required"`
+	DNS    *DNSToml    `mapstructure:"dns" toml:"dns" validate:"required"`
+	Client *ClientTOML `mapstructure:"client" toml:"client" validate:"required_without=Server"`
+	Server *ServerTOML `mapstructure:"server" toml:"server"  validate:"required_without=Client"`
+	DB     *DBToml     `mapstructure:"db" toml:"db" validate:"required_without=Client"`
 }
 
 type ConfigGo struct {
@@ -61,16 +61,6 @@ func (conf *ConfigGo) Save(filename string) error {
 	viper.Set("log.file", conf.toml.Log.File)
 	viper.Set("log.level", conf.toml.Log.Level)
 	return viper.WriteConfigAs(filename)
-	/*file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	encoder := toml.NewEncoder(file)
-	err = encoder.Encode(conf)
-	if err != nil {
-		return err
-	}
-	return nil*/
 }
 
 func NewConf() *ConfigGo {

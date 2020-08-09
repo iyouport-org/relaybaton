@@ -49,7 +49,6 @@ func (android *Android) Run() {
 }
 
 func (android *Android) Shutdown() {
-	android.Client.Shutdown()
 	err := android.App.Stop(context.Background())
 	if err != nil {
 		log.Error(err)

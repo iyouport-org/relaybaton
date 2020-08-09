@@ -20,13 +20,13 @@ const (
 	DBTypeSQLServer  dbType = "sqlserver"
 )
 
-type dbTOML struct {
-	Type     string `mapstructure:"type"  toml:"type" `
-	Username string `mapstructure:"username"  toml:"username" `
-	Password string `mapstructure:"password"  toml:"password" `
-	Host     string `mapstructure:"host"  toml:"host" `
-	Port     int    `mapstructure:"port"  toml:"port" `
-	Database string `mapstructure:"database"  toml:"database" `
+type DBToml struct {
+	Type     string `mapstructure:"type"  toml:"type" validate:"required_with=DBToml"`
+	Username string `mapstructure:"username"  toml:"username" validate:"required_with=DBToml"`
+	Password string `mapstructure:"password"  toml:"password" validate:"required_with=DBToml"`
+	Host     string `mapstructure:"host"  toml:"host" validate:"required_with=DBToml"`
+	Port     int    `mapstructure:"port"  toml:"port" validate:"required_with=DBToml"`
+	Database string `mapstructure:"database"  toml:"database" validate:"required_with=DBToml"`
 }
 
 type dbGo struct {
@@ -34,7 +34,7 @@ type dbGo struct {
 	DB   *gorm.DB
 }
 
-func (dbt *dbTOML) Init() (dbg *dbGo, err error) {
+func (dbt *DBToml) Init() (dbg *dbGo, err error) {
 	dbg = &dbGo{}
 	var connStr string
 	switch dbt.Type {

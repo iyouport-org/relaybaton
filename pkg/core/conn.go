@@ -33,6 +33,7 @@ type Conn struct {
 	localConn  gnet.Conn
 	remoteConn *websocket.Conn
 	clientConf *config.ClientGo
+	tcpConn    net.Conn
 }
 
 func NewConn(gnetConn gnet.Conn, clientConf *config.ClientGo) *Conn {
@@ -131,6 +132,24 @@ func (conn *Conn) Run() {
 		if err != nil {
 			log.Error(err)
 			conn.remoteConn.Close()
+			return
+		}
+	}
+}
+
+func (conn *Conn) DirectConnect() {
+	for {
+		b := make([]byte, 1<<16)
+		n, err := conn.tcpConn.Read(b)
+		if err != nil {
+			log.Error(err)
+			conn.tcpConn.Close()
+			return
+		}
+		err = conn.localConn.AsyncWrite(b[:n])
+		if err != nil {
+			log.Error(err)
+			conn.tcpConn.Close()
 			return
 		}
 	}

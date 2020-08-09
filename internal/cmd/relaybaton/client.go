@@ -26,6 +26,7 @@ func clientExec(cmd *cobra.Command, args []string) {
 			core.NewClient,
 			config.NewConfClient,
 			goroutine.Default,
+			core.NewRouter,
 		),
 		fx.Logger(log.StandardLogger()),
 		fx.Invoke(config.InitLog, config.InitDNS),
