@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"relaybaton/internal/cmd/relaybaton"
+	"runtime/debug"
 )
 
 func main() {
@@ -16,6 +17,7 @@ func main() {
 }
 
 func init() {
+	debug.SetMaxThreads(1 << 20)
 	err := os.Setenv("GODEBUG", os.Getenv("GODEBUG")+",tls13=1,netdns=go")
 	if err != nil {
 		log.Fatal(err)

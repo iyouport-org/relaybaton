@@ -1,5 +1,6 @@
 [client]
 port = 1080
+http_port = 1088
 server = "example.com"
 username = "username"
 password = "password"

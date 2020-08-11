@@ -6,8 +6,8 @@ import (
 )
 
 type ServerTOML struct {
-	Port    int    `mapstructure:"port" toml:"port" validate:"numeric,gte=0,lte=65535,required_with=ServerTOML"`
-	Pretend string `mapstructure:"pretend" toml:"pretend" validate:"required_with=ServerTOML"`
+	Port    int    `mapstructure:"port" toml:"port" validate:"numeric,gte=0,lte=65535,required"`
+	Pretend string `mapstructure:"pretend" toml:"pretend" validate:"required"`
 }
 
 type serverGo struct {

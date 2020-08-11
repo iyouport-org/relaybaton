@@ -21,12 +21,13 @@ import (
 	"relaybaton/pkg/config"
 	"relaybaton/pkg/socks5"
 	"strconv"
-	"sync"
+	"time"
 )
 
 type Client struct {
 	fx.Lifecycle
 	*gnet.EventServer
+	httpServer *HTTPServer
 	*config.ConfigGo
 	*goroutine.Pool
 	conns    *Map
@@ -42,6 +43,10 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, rou
 		conns:     NewMap(),
 		shutdown:  make(chan byte, 10),
 		router:    router,
+	}
+
+	client.httpServer = &HTTPServer{
+		Client: client,
 	}
 
 	client.Append(fx.Hook{
@@ -60,7 +65,17 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, rou
 }
 
 func (client *Client) Run() error {
-	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port), gnet.WithMulticore(true), gnet.WithReusePort(true), gnet.WithLogger(log.StandardLogger()))
+	go client.httpServer.Serve()
+	transparent := TransparentServer{
+		Client: client,
+	}
+	go transparent.Run()
+	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port),
+		gnet.WithMulticore(true),
+		gnet.WithReusePort(true),
+		gnet.WithLogger(log.StandardLogger()),
+		gnet.WithLoadBalancing(gnet.SourceAddrHash),
+		gnet.WithTCPKeepAlive(time.Minute))
 	if err != nil {
 		log.Error(err)
 	}
@@ -68,17 +83,6 @@ func (client *Client) Run() error {
 }
 
 func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
-	var once sync.Once
-	go once.Do(func() {
-		if !client.Client.ProxyAll {
-			err := client.router.Update()
-			if err != nil {
-				log.Error(err)
-				return
-			}
-		}
-	})
-
 	select {
 	case <-client.shutdown:
 		action = gnet.Shutdown
@@ -130,8 +134,7 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 				return
 			}
 			conn.cmd = request.Cmd
-
-			if client.router.Select(c.RemoteAddr().(*net.TCPAddr).IP) {
+			if client.router.Select(conn.dstAddr.(*net.TCPAddr).IP) {
 				resp, err := conn.DialWs(request)
 				if err != nil {
 					log.Error(err)
@@ -175,7 +178,7 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 			}
 		case StatusAccepted:
 			var err error
-			if client.router.Select(c.RemoteAddr().(*net.TCPAddr).IP) {
+			if client.router.Select(conn.dstAddr.(*net.TCPAddr).IP) {
 				err = conn.remoteConn.WriteMessage(websocket.BinaryMessage, frame)
 			} else {
 				_, err = conn.tcpConn.Write(frame)
@@ -248,8 +251,4 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 func (client *Client) OnShutdown(svr gnet.Server) {
 	log.Debug("shutdown")
 	client.Pool.Release()
-}
-
-func updateGeoIP() {
-
 }

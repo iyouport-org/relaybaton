@@ -21,12 +21,12 @@ const (
 )
 
 type DBToml struct {
-	Type     string `mapstructure:"type"  toml:"type" validate:"required_with=DBToml"`
-	Username string `mapstructure:"username"  toml:"username" validate:"required_with=DBToml"`
-	Password string `mapstructure:"password"  toml:"password" validate:"required_with=DBToml"`
-	Host     string `mapstructure:"host"  toml:"host" validate:"required_with=DBToml"`
-	Port     int    `mapstructure:"port"  toml:"port" validate:"required_with=DBToml"`
-	Database string `mapstructure:"database"  toml:"database" validate:"required_with=DBToml"`
+	Type     string `mapstructure:"type"  toml:"type" validate:"required"`
+	Username string `mapstructure:"username"  toml:"username" validate:"required"`
+	Password string `mapstructure:"password"  toml:"password" validate:"required"`
+	Host     string `mapstructure:"host"  toml:"host" validate:"required"`
+	Port     int    `mapstructure:"port"  toml:"port" validate:"required"`
+	Database string `mapstructure:"database"  toml:"database" validate:"required"`
 }
 
 type dbGo struct {

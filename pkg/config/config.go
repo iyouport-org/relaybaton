@@ -14,9 +14,9 @@ import (
 type ConfigTOML struct {
 	Log    *LogTOML    `mapstructure:"log" toml:"log" validate:"required"`
 	DNS    *DNSToml    `mapstructure:"dns" toml:"dns" validate:"required"`
-	Client *ClientTOML `mapstructure:"client" toml:"client" validate:"required_without=Server"`
-	Server *ServerTOML `mapstructure:"server" toml:"server"  validate:"required_without=Client"`
-	DB     *DBToml     `mapstructure:"db" toml:"db" validate:"required_without=Client"`
+	Client *ClientTOML `mapstructure:"client" toml:"client" validate:"-"`
+	Server *ServerTOML `mapstructure:"server" toml:"server" validate:"-"`
+	DB     *DBToml     `mapstructure:"db" toml:"db" validate:"-"`
 }
 
 type ConfigGo struct {
@@ -89,6 +89,13 @@ func NewConf() *ConfigGo {
 
 func NewConfClient() (conf *ConfigGo, err error) {
 	conf = NewConf()
+	validate := validator.New()
+	logrus.Debug(conf.toml.Client.ProxyAll)
+	err = validate.Struct(conf.toml.Client)
+	if err != nil {
+		logrus.Error(err)
+		return nil, err
+	}
 	conf.Client, err = conf.toml.Client.Init()
 	if err != nil {
 		logrus.Error(err)
@@ -99,9 +106,18 @@ func NewConfClient() (conf *ConfigGo, err error) {
 
 func NewConfServer() (conf *ConfigGo, err error) {
 	conf = NewConf()
+	validate := validator.New()
+	err = validate.Struct(conf.toml.Server)
+	if err != nil {
+		return nil, err
+	}
 	conf.Server, err = conf.toml.Server.Init()
 	if err != nil {
 		logrus.Error(err)
+		return nil, err
+	}
+	err = validate.Struct(conf.toml.DB)
+	if err != nil {
 		return nil, err
 	}
 	conf.DB, err = conf.toml.DB.Init()

@@ -3,10 +3,12 @@ package log
 import (
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
+	"sync"
 )
 
 type SQLiteHook struct {
-	db *gorm.DB
+	mutex sync.Mutex
+	db    *gorm.DB
 }
 
 func NewSQLiteHook(db *gorm.DB) *SQLiteHook {
@@ -15,12 +17,14 @@ func NewSQLiteHook(db *gorm.DB) *SQLiteHook {
 	}
 }
 
-func (hook SQLiteHook) Levels() []logrus.Level {
+func (hook *SQLiteHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
-func (hook SQLiteHook) Fire(entry *logrus.Entry) error {
+func (hook *SQLiteHook) Fire(entry *logrus.Entry) error {
 	record := NewRecord(entry)
+	//hook.mutex.Lock()
+	//defer hook.mutex.Unlock()
 	hook.db.Create(record)
 	return nil
 }

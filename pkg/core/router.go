@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/emirpasic/gods/maps/hashmap"
 	"github.com/mholt/archiver"
 	"github.com/oschwald/geoip2-golang"
@@ -100,6 +101,7 @@ func (router *Router) getGeoIP(ip net.IP) bool {
 	router.mutex.RLock()
 	defer router.mutex.RUnlock()
 	if isReservedIP(ip) {
+		log.Debug("reserved")
 		return false
 	}
 	if !router.on {
@@ -137,9 +139,10 @@ func (router *Router) RemoveCache(ip net.IP) {
 }
 
 func (router *Router) Download() error {
+	log.Debug("Updating")
 	router.SwitchOff()
 	client := fasthttp.Client{
-		Dial: fasthttpproxy.FasthttpHTTPDialer("localhost:%d"),
+		Dial: fasthttpproxy.FasthttpSocksDialer(fmt.Sprintf("localhost:%d", router.conf.Client.Port)),
 	}
 	resp := make([]byte, 1<<22)
 	statusCode, body, err := client.Get(resp, "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=JvbzLLx7qBZT&suffix=tar.gz")
@@ -175,9 +178,11 @@ func (router *Router) Download() error {
 	err = gz.Walk(router.compressedPath, func(f archiver.File) error {
 		log.Debug(f.Name())
 		if filepath.Ext(f.Name()) == ".mmdb" {
-			err := router.GeoIPDB.Close()
-			if err != nil {
-				log.Error(err)
+			if router.GeoIPDB != nil {
+				err := router.GeoIPDB.Close()
+				if err != nil {
+					log.Error(err)
+				}
 			}
 			mmdb, err := os.Create(router.mmdbPath)
 			if err != nil {
@@ -203,10 +208,12 @@ func (router *Router) Download() error {
 		return err
 	}
 	router.SwitchOn()
+	log.Debug("Updated")
 	return nil
 }
 
 func (router *Router) Update() error {
+	log.Debug("Checking update")
 	f, err := os.Open(router.compressedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -230,7 +237,7 @@ func (router *Router) Update() error {
 	sum := h.Sum(nil)
 
 	client := fasthttp.Client{
-		Dial: fasthttpproxy.FasthttpHTTPDialer("localhost:7890"),
+		Dial: fasthttpproxy.FasthttpSocksDialer(fmt.Sprintf("localhost:%d", router.conf.Client.Port)),
 	}
 	resp := make([]byte, 1<<10)
 	statusCode, body, err := client.Get(resp, "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=JvbzLLx7qBZT&suffix=tar.gz.sha256")
@@ -246,6 +253,7 @@ func (router *Router) Update() error {
 	if strings.HasPrefix(string(body), hex.EncodeToString(sum)) {
 		return nil
 	} else {
+		log.Debug("Update found")
 		err = router.Download()
 		if err != nil {
 			log.Error(err)
@@ -256,11 +264,13 @@ func (router *Router) Update() error {
 }
 
 func isReservedIP(ip net.IP) bool {
-	if ip.IsGlobalUnicast() || ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
+	if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
+		log.Debug("IsInterfaceLocalMulticast")
 		return true
 	}
 	for _, block := range reservedIP {
 		if block.Contains(ip) {
+			log.Debug(block.String())
 			return true
 		}
 	}
@@ -289,7 +299,7 @@ func init() {
 		"::/0",
 		"::/128",
 		"::1/128",
-		"::ffff:0:0/96",
+		//"::ffff:0:0/96",
 		"::ffff:0:0:0/96",
 		"64:ff9b::/96",
 		"100::/64",
@@ -303,7 +313,7 @@ func init() {
 	} {
 		_, block, err := net.ParseCIDR(cidr)
 		if err != nil {
-			log.Error(err)
+			log.WithField("cidr", cidr).Error(err)
 			continue
 		}
 		reservedIP = append(reservedIP, block)

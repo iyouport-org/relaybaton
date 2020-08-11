@@ -226,7 +226,6 @@ func setupUI() {
 				buttonStopOnClick(buttonStop)
 				ui.MsgBoxError(mainWin, "Error", err.Error())
 			}
-			client.Shutdown()
 		}()
 	})
 	buttonStop.OnClicked(buttonStopOnClick)
@@ -271,16 +270,16 @@ func ApplyConf(conf *config.ConfigGo) {
 func GetConf() (*config.ConfigGo, error) {
 	var err error
 	confTOML := &config.ConfigTOML{
-		Log: config.LogTOML{
+		Log: &config.LogTOML{
 			File:  entryLogFile.Text(),
 			Level: log.Level(comboBoxLogLevel.Selected()).String(),
 		},
-		DNS: config.DNSToml{
+		DNS: &config.DNSToml{
 			Type:   dnsType2Conf(comboBoxDNSType.Selected()),
 			Server: entryDNSServer.Text(),
 			Addr:   entryDNSAddr.Text(),
 		},
-		Client: config.ClientTOML{
+		Client: &config.ClientTOML{
 			Port:     spinBoxClientPort.Value(),
 			Server:   entryClientServer.Text(),
 			Username: entryClientUsername.Text(),
