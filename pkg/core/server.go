@@ -3,7 +3,9 @@ package core
 import (
 	"compress/flate"
 	"context"
+	"errors"
 	"fmt"
+	"github.com/emirpasic/gods/maps/hashmap"
 	"github.com/fasthttp/websocket"
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
@@ -19,12 +21,15 @@ type Server struct {
 	fx.Lifecycle
 	net.Listener
 	*config.ConfigGo
+	*hashmap.Map
+	mutex sync.RWMutex
 }
 
 func NewServer(lc fx.Lifecycle, conf *config.ConfigGo) *Server {
 	server := &Server{
 		Lifecycle: lc,
 		ConfigGo:  conf,
+		Map:       hashmap.New(),
 	}
 	server.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -67,6 +72,7 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	ctx.Response.Header.Add("reply", fmt.Sprintf("%d", socks5.RepSucceeded))
+	username := ctx.Request.Header.Peek("username")
 	err = upgrader.Upgrade(ctx, func(conn *websocket.Conn) {
 		err = conn.SetCompressionLevel(flate.BestCompression)
 		if err != nil {
@@ -76,11 +82,33 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 		}
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go func() {
+		go func(username string) {
 			for {
-				b := make([]byte, 65535)
+				bucket, err := server.GetBucket(username)
+				if err != nil {
+					log.Error(err)
+					wg.Done()
+					return
+				}
+				readLen := bucket.Available()
+				if readLen == 0 {
+					readLen = uint64(bucket.bandwidth)
+				}
+				b := make([]byte, readLen)
 				n, err := c.Read(b)
 				//_, err = io.Copy(writer, c)
+				if err != nil {
+					log.Error(err)
+					wg.Done()
+					return
+				}
+				/*if available > 0 && int64(n) > available {
+					log.WithFields(log.Fields{
+						"n":      n,
+						"bucket": available,
+					}).Debug("waiting bucket")
+				}*/
+				err = bucket.Wait(uint(n))
 				if err != nil {
 					log.Error(err)
 					wg.Done()
@@ -93,9 +121,9 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 					return
 				}
 			}
-		}()
+		}(string(username))
 
-		go func() {
+		go func(username string) {
 			for {
 				_, b, err := conn.ReadMessage()
 				if err != nil {
@@ -110,7 +138,7 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 					return
 				}
 			}
-		}()
+		}(string(username))
 		wg.Wait()
 		err := conn.Close()
 		if err != nil {
@@ -166,4 +194,34 @@ func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
 		log.Error(err)
 		return
 	}
+}
+
+func (server *Server) GetBucket(username string) (*RateLimiter, error) {
+	server.mutex.RLock()
+	v, ok := server.Map.Get(username)
+	server.mutex.RUnlock()
+	if !ok {
+		db := server.DB.DB
+		db.AutoMigrate(&User{})
+		var user User
+		err := db.Where("username = ?", username).First(&user).Error
+		if err != nil {
+			log.WithField("username", username).Error(err)
+			return nil, err
+		}
+		log.WithField("limit", user.BandwidthLimit).Debug("bandwidth limit")
+		bucket := NewRateLimiter(user.BandwidthLimit / 2)
+		server.mutex.Lock()
+		server.Map.Put(username, bucket)
+		server.mutex.Unlock()
+		log.Debug("bucket saved")
+		return bucket, nil
+	}
+	bucket, ok := v.(*RateLimiter)
+	if !ok {
+		err := errors.New("type error")
+		log.Error(err)
+		return nil, err
+	}
+	return bucket, nil
 }

@@ -12,6 +12,7 @@ require (
 	github.com/emirpasic/gods v1.12.0
 	github.com/eycorsican/go-tun2socks v1.16.9
 	github.com/fasthttp/websocket v1.4.3
+	github.com/frankban/quicktest v1.10.0 // indirect
 	github.com/go-playground/validator/v10 v10.3.0
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/gopacket v1.1.18

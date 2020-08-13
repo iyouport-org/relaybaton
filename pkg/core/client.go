@@ -242,7 +242,9 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 				log.Error(cErr)
 			}
 		}
-		client.router.RemoveCache(conn.dstAddr.(*net.TCPAddr).IP)
+		if conn.dstAddr != nil {
+			client.router.RemoveCache(conn.dstAddr.(*net.TCPAddr).IP)
+		}
 	}
 	client.conns.Delete(key)
 	return

@@ -1,3 +1,5 @@
+// +build linux,!386
+
 package core
 
 import (

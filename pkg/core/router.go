@@ -265,7 +265,7 @@ func (router *Router) Update() error {
 
 func isReservedIP(ip net.IP) bool {
 	if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsLoopback() || ip.IsMulticast() || ip.IsUnspecified() {
-		log.Debug("IsInterfaceLocalMulticast")
+		log.Trace("reserved")
 		return true
 	}
 	for _, block := range reservedIP {
