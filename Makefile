@@ -83,6 +83,11 @@ cross_mac_desktop: go
 	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -o $(PRJ_DIR)/bin/relaybaton-desktop+darwin $(PRJ_DIR)/cmd/desktop/main.go
 
+cross_arm64: go
+	go mod vendor
+	GOROOT=$(GOROOT_LOCAL) GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC_FOR_TARGET=aarch64-linux-gnu-gcc CC=aarch64-linux-gnu-gcc CC_FOR_linux_arm64=o64-clang CXX=aarch64-linux-gnu-g++ CXX_FOR_TARGET=aarch64-linux-gnu-g++ CXX_FOR_linux_arm64=aarch64-linux-gnu-g++ go build -o $(PRJ_DIR)/bin/relaybaton-arm64 $(PRJ_DIR)/cmd/cli/main.go
+
+
 # Default target must build Go
 .PHONY: go
 go: $(BUILD_DIR)/$(OS_ARCH)/.ok_$(VER_OS_ARCH)

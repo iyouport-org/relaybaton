@@ -82,6 +82,18 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 		}
 		var wg sync.WaitGroup
 		wg.Add(2)
+		bandwidth := 0
+		defer func(username string) {
+			user, err := server.getUser(username)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			user.TrafficUsed += uint(bandwidth)
+			db := server.DB.DB
+			db.AutoMigrate(&User{})
+			db.Save(user)
+		}(string(username))
 		go func(username string) {
 			for {
 				bucket, err := server.GetBucket(username)
@@ -96,24 +108,18 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 				}
 				b := make([]byte, readLen)
 				n, err := c.Read(b)
-				//_, err = io.Copy(writer, c)
 				if err != nil {
 					log.Error(err)
 					wg.Done()
 					return
 				}
-				/*if available > 0 && int64(n) > available {
-					log.WithFields(log.Fields{
-						"n":      n,
-						"bucket": available,
-					}).Debug("waiting bucket")
-				}*/
 				err = bucket.Wait(uint(n))
 				if err != nil {
 					log.Error(err)
 					wg.Done()
 					return
 				}
+				bandwidth += n
 				err = conn.WriteMessage(websocket.BinaryMessage, b[:n])
 				if err != nil {
 					log.Error(err)
@@ -122,7 +128,6 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 				}
 			}
 		}(string(username))
-
 		go func(username string) {
 			for {
 				_, b, err := conn.ReadMessage()
@@ -131,6 +136,7 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 					wg.Done()
 					return
 				}
+				bandwidth += len(b)
 				_, err = c.Write(b)
 				if err != nil {
 					log.Error(err)
@@ -158,24 +164,24 @@ func (server *Server) Authenticate(ctx *fasthttp.RequestCtx) bool {
 	}
 	username := string(ctx.Request.Header.Peek("username"))
 	password := string(ctx.Request.Header.Peek("password"))
-	correctPassword, err := server.getPassword(username)
+	user, err := server.getUser(username)
 	if err != nil {
 		log.Error(err)
 		return false
 	}
-	return password == correctPassword
+	return (password == user.Password) && (user.TrafficLimit > user.TrafficUsed)
 }
 
-func (server *Server) getPassword(username string) (string, error) {
+func (server *Server) getUser(username string) (*User, error) {
 	db := server.DB.DB
-	db.AutoMigrate(&User{})
-	var user User
-	err := db.Where("username = ?", username).First(&user).Error
+	user := &User{}
+	db.AutoMigrate(user)
+	err := db.Where("username = ?", username).First(user).Error
 	if err != nil {
 		log.WithField("username", username).Error(err)
-		return "", err
+		return nil, err
 	}
-	return user.Password, nil
+	return user, err
 }
 
 func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
@@ -186,8 +192,6 @@ func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
 	newReq.WriteTo(log.StandardLogger().Writer())
 	rep := fasthttp.AcquireResponse()
 	err := fasthttp.Do(newReq, rep)
-
-	//rep.WriteTo(log.StandardLogger().Writer())
 	newReq.Header.Header()
 	rep.CopyTo(&ctx.Response)
 	if err != nil {
@@ -201,10 +205,7 @@ func (server *Server) GetBucket(username string) (*RateLimiter, error) {
 	v, ok := server.Map.Get(username)
 	server.mutex.RUnlock()
 	if !ok {
-		db := server.DB.DB
-		db.AutoMigrate(&User{})
-		var user User
-		err := db.Where("username = ?", username).First(&user).Error
+		user, err := server.getUser(username)
 		if err != nil {
 			log.WithField("username", username).Error(err)
 			return nil, err
