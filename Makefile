@@ -87,6 +87,9 @@ cross_arm64: go
 	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC_FOR_TARGET=aarch64-linux-gnu-gcc CC=aarch64-linux-gnu-gcc CC_FOR_linux_arm64=o64-clang CXX=aarch64-linux-gnu-g++ CXX_FOR_TARGET=aarch64-linux-gnu-g++ CXX_FOR_linux_arm64=aarch64-linux-gnu-g++ go build -o $(PRJ_DIR)/bin/relaybaton-arm64 $(PRJ_DIR)/cmd/cli/main.go
 
+desktop_lib: go
+	go mod vendor
+	GOROOT=$(GOROOT_LOCAL) go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.a $(PRJ_DIR)/cmd/desktop/core.go
 
 # Default target must build Go
 .PHONY: go

@@ -50,17 +50,20 @@ func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
 }
 
 func (conf *ConfigGo) Save(filename string) error {
-	viper.Set("client.port", conf.toml.Client.Port)
-	viper.Set("client.server", conf.toml.Client.Server)
-	viper.Set("client.username", conf.toml.Client.Username)
-	viper.Set("client.password", conf.toml.Client.Password)
-	viper.Set("client.proxy_all", conf.toml.Client.ProxyAll)
-	viper.Set("dns.type", conf.toml.DNS.Type)
-	viper.Set("dns.server", conf.toml.DNS.Server)
-	viper.Set("dns.addr", conf.toml.DNS.Addr)
-	viper.Set("log.file", conf.toml.Log.File)
-	viper.Set("log.level", conf.toml.Log.Level)
-	return viper.WriteConfigAs(filename)
+	v := viper.New()
+	v.Set("client.port", conf.toml.Client.Port)
+	v.Set("client.http_port", conf.toml.Client.HTTPPort)
+	v.Set("client.transparent_port", conf.toml.Client.TransparentPort)
+	v.Set("client.server", conf.toml.Client.Server)
+	v.Set("client.username", conf.toml.Client.Username)
+	v.Set("client.password", conf.toml.Client.Password)
+	v.Set("client.proxy_all", conf.toml.Client.ProxyAll)
+	v.Set("dns.type", conf.toml.DNS.Type)
+	v.Set("dns.server", conf.toml.DNS.Server)
+	v.Set("dns.addr", conf.toml.DNS.Addr)
+	v.Set("log.file", conf.toml.Log.File)
+	v.Set("log.level", conf.toml.Log.Level)
+	return v.WriteConfigAs(filename)
 }
 
 func NewConf() *ConfigGo {
@@ -87,21 +90,25 @@ func NewConf() *ConfigGo {
 	return conf
 }
 
-func NewConfClient() (conf *ConfigGo, err error) {
-	conf = NewConf()
+func (conf *ConfigGo) InitClient() error {
 	validate := validator.New()
-	logrus.Debug(conf.toml.Client.ProxyAll)
-	err = validate.Struct(conf.toml.Client)
+	err := validate.Struct(conf.toml.Client)
 	if err != nil {
 		logrus.Error(err)
-		return nil, err
+		return err
 	}
 	conf.Client, err = conf.toml.Client.Init()
 	if err != nil {
 		logrus.Error(err)
-		return nil, err
+		return err
 	}
-	return conf, nil
+	return nil
+}
+
+func NewConfClient() (conf *ConfigGo, err error) {
+	conf = NewConf()
+	err = conf.InitClient()
+	return
 }
 
 func NewConfServer() (conf *ConfigGo, err error) {
