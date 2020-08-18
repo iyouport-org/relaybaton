@@ -63,9 +63,9 @@ relaybaton: go
 	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) go build -o $(PRJ_DIR)/bin/relaybaton $(PRJ_DIR)/cmd/cli/main.go
 
-desktop: relaybaton go
+desktop: go
 	go mod vendor
-	GOROOT=$(GOROOT_LOCAL) go build -o $(PRJ_DIR)/bin/relaybaton-desktop $(PRJ_DIR)/cmd/desktop/main.go
+	GOROOT=$(GOROOT_LOCAL) go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.a $(PRJ_DIR)/cmd/desktop/core.go
 
 cross_windows: go
 	go mod vendor
@@ -77,19 +77,15 @@ cross_mac: go
 
 cross_windows_desktop: go
 	go mod vendor
-	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -o $(PRJ_DIR)/bin/relaybaton-desktop.exe $(PRJ_DIR)/cmd/desktop/main.go
+	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.lib $(PRJ_DIR)/cmd/desktop/core.go
 
 cross_mac_desktop: go
 	go mod vendor
-	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -o $(PRJ_DIR)/bin/relaybaton-desktop+darwin $(PRJ_DIR)/cmd/desktop/main.go
+	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.a $(PRJ_DIR)/cmd/desktop/core.go
 
 cross_arm64: go
 	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC_FOR_TARGET=aarch64-linux-gnu-gcc CC=aarch64-linux-gnu-gcc CC_FOR_linux_arm64=o64-clang CXX=aarch64-linux-gnu-g++ CXX_FOR_TARGET=aarch64-linux-gnu-g++ CXX_FOR_linux_arm64=aarch64-linux-gnu-g++ go build -o $(PRJ_DIR)/bin/relaybaton-arm64 $(PRJ_DIR)/cmd/cli/main.go
-
-desktop_lib: go
-	go mod vendor
-	GOROOT=$(GOROOT_LOCAL) go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.a $(PRJ_DIR)/cmd/desktop/core.go
 
 # Default target must build Go
 .PHONY: go
