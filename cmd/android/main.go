@@ -4,13 +4,14 @@ import (
 	"context"
 	"github.com/eycorsican/go-tun2socks/core"
 	"github.com/eycorsican/go-tun2socks/proxy/socks"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	relaybatonCore "github.com/iyouport-org/relaybaton/pkg/core"
 	"github.com/panjf2000/gnet/pool/goroutine"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/fx"
-	_ "golang.org/x/mobile/bind"
-	_ "golang.org/x/mobile/bind/java"
-	"relaybaton/pkg/config"
-	relaybatonCore "relaybaton/pkg/core"
+	//_ "golang.org/x/mobile/bind"
+	//_ "golang.org/x/mobile/bind/java"
+	// "golang.org/x/mod/semver"
 	"time"
 )
 

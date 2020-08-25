@@ -8,14 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fasthttp/websocket"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	"github.com/iyouport-org/relaybaton/pkg/socks5"
+	"github.com/iyouport-org/relaybaton/pkg/util"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
 	"net/url"
-	"relaybaton/pkg/config"
-	"relaybaton/pkg/socks5"
-	"relaybaton/pkg/util"
 	"time"
 )
 

@@ -2,12 +2,12 @@ package relaybaton
 
 import (
 	"context"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	"github.com/iyouport-org/relaybaton/pkg/core"
 	"github.com/panjf2000/gnet/pool/goroutine"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
-	"relaybaton/pkg/config"
-	"relaybaton/pkg/core"
 )
 
 var ClientCmd = &cobra.Command{

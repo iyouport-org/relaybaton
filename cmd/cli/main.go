@@ -4,10 +4,10 @@ package main
 import (
 	"C"
 	_ "github.com/cloudflare/tls-tris"
+	"github.com/iyouport-org/relaybaton/internal/cmd/relaybaton"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"os"
-	"relaybaton/internal/cmd/relaybaton"
 	"runtime/debug"
 )
 

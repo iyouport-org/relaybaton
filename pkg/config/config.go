@@ -2,12 +2,12 @@ package config
 
 import (
 	"github.com/go-playground/validator/v10"
+	"github.com/iyouport-org/relaybaton/pkg/dns"
+	"github.com/iyouport-org/relaybaton/pkg/log"
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"net"
-	"relaybaton/pkg/dns"
-	"relaybaton/pkg/log"
 )
 
 // ConfigTOML is the struct mapped from the configuration file

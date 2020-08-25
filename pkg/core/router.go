@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/emirpasic/gods/maps/hashmap"
+	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/mholt/archiver"
 	"github.com/oschwald/geoip2-golang"
 	log "github.com/sirupsen/logrus"
@@ -17,7 +18,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"relaybaton/pkg/config"
 	"strings"
 	"sync"
 )

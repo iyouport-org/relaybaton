@@ -23,6 +23,7 @@ OS_ARCH     := $(OS)_$(ARCH)
 VER_OS_ARCH := $(shell $(GO) version | cut -d' ' -f 3)_$(OS)_$(ARCH)
 VER_MAJOR   := $(shell $(GO) version | cut -d' ' -f 3 | cut -d. -f1-2 | sed 's/[br].*//')
 GOROOT_ENV  ?= $(shell $(GO) env GOROOT)
+GOPATH_ENV  ?= $(shell $(GO) env GOPATH)
 GOROOT_LOCAL = $(BUILD_DIR)/$(OS_ARCH)
 # Flag indicates wheter invoke "go install -race std". Supported only on amd64 with CGO enabled
 INSTALL_RACE:= $(words $(filter $(ARCH)_$(shell go env CGO_ENABLED), amd64_1))
@@ -31,8 +32,8 @@ INSTALL_RACE:= $(words $(filter $(ARCH)_$(shell go env CGO_ENABLED), amd64_1))
 TARGET_TEST_COMPAT=boring picotls tstclnt
 
 # Some target-specific constants
-BORINGSSL_REVISION=ff433815b51c34496bb6bea13e73e29e5c278238
-BOGO_DOCKER_TRIS_LOCATION=/go/src/github.com/cloudflare/tls-tris
+BORINGSSL_REVISION = ff433815b51c34496bb6bea13e73e29e5c278238
+BOGO_DOCKER_TRIS_LOCATION = /go/src/github.com/cloudflare/tls-tris
 
 TRIS_SOURCES := $(wildcard $(PRJ_DIR)/*.go)
 
@@ -60,43 +61,51 @@ endif
 ##############################
 
 relaybaton: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) go build -o $(PRJ_DIR)/bin/relaybaton $(PRJ_DIR)/cmd/cli/main.go
 
 desktop: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.a $(PRJ_DIR)/cmd/desktop/core.go
 
+mobile: go
+	GO111MODULE="off" go get golang.org/x/mobile/cmd/gomobile
+	GO111MODULE="off" go get golang.org/x/mobile/cmd/gobind
+	GO111MODULE="off" gomobile init
+	GOROOT=$(GOROOT_LOCAL) GO111MODULE="off"  $(GOPATH_ENV)/bin/gomobile bind -v -o bin/relaybaton.aar -target=android  $(PRJ_DIR)/cmd/android
+
 cross_windows: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -o $(PRJ_DIR)/bin/relaybaton.exe $(PRJ_DIR)/cmd/cli/main.go
 
 cross_mac: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -o $(PRJ_DIR)/bin/relaybaton+darwin $(PRJ_DIR)/cmd/cli/main.go
 
 cross_windows_desktop: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.lib $(PRJ_DIR)/cmd/desktop/core.go
 
 cross_mac_desktop: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -buildmode=c-archive -o $(PRJ_DIR)/bin/core.a $(PRJ_DIR)/cmd/desktop/core.go
 
 cross_arm64: go
-	go mod vendor
 	GOROOT=$(GOROOT_LOCAL) GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CC_FOR_TARGET=aarch64-linux-gnu-gcc CC=aarch64-linux-gnu-gcc CC_FOR_linux_arm64=o64-clang CXX=aarch64-linux-gnu-g++ CXX_FOR_TARGET=aarch64-linux-gnu-g++ CXX_FOR_linux_arm64=aarch64-linux-gnu-g++ go build -o $(PRJ_DIR)/bin/relaybaton-arm64 $(PRJ_DIR)/cmd/cli/main.go
 
 # Default target must build Go
 .PHONY: go
-go: $(BUILD_DIR)/$(OS_ARCH)/.ok_$(VER_OS_ARCH)
+go: $(BUILD_DIR)/$(OS_ARCH)/.ok_$(VER_OS_ARCH) $(PRJ_DIR)/vendor
 
 # Ensure src and src/vendor directories are present when building in parallel)
 $(GOROOT_LOCAL)/src/$(STD_VENDOR_DIR):
 	mkdir -p $@
 
+$(PRJ_DIR)/vendor:
+	go mod tidy
+	go mod vendor
+
+$(GOROOT_LOCAL)/bin: $(GOROOT_ENV)/bin
+	#rm -rf $(GOROOT_LOCAL)/bin
+	#mkdir -p "$(GOROOT_LOCAL)/bin"
+	#cp -r $(GOROOT_ENV)/bin $(GOROOT_LOCAL)/
+	#cp -r $(GOPATH_ENV)/bin $(GOROOT_LOCAL)/
 # Replace the local copy if the system Go version has changed.
-$(GOROOT_LOCAL)/pkg/.ok_$(VER_OS_ARCH): $(GOROOT_ENV)/pkg | $(GOROOT_LOCAL)/src/$(STD_VENDOR_DIR)
+$(GOROOT_LOCAL)/pkg/.ok_$(VER_OS_ARCH): $(GOROOT_ENV)/pkg | $(GOROOT_LOCAL)/src/$(STD_VENDOR_DIR) $(GOROOT_LOCAL)/bin
 	rm -rf $(GOROOT_LOCAL)/pkg $(GOROOT_LOCAL)/src
 	mkdir -p "$(GOROOT_LOCAL)/pkg"
 	cp -r $(GOROOT_ENV)/src $(GOROOT_LOCAL)/

@@ -1,4 +1,5 @@
 // +build linux
+// +build amd64 arm64 riscv64 arm mips mipsle mips64 mips64le ppc64 ppc64le s390x
 
 package core
 

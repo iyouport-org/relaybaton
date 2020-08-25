@@ -1,16 +1,15 @@
-module relaybaton
+module github.com/iyouport-org/relaybaton
 
 go 1.14
 
 require (
-	github.com/andlabs/ui v0.0.0-20200610043537-70a69d6ae31e
 	github.com/asaskevich/govalidator v0.0.0-20200428143746-21a406dcc535
 	github.com/cloudflare/sidh v0.0.0-20190228162259-d2f0f90e08aa // indirect
 	github.com/cloudflare/tls-tris v0.0.0-20190503140226-b99e30c5ee6d
 	github.com/denisenkom/go-mssqldb v0.0.0-20200620013148-b91950f658ec // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/emirpasic/gods v1.12.0
-	github.com/eycorsican/go-tun2socks v1.16.9
+	github.com/eycorsican/go-tun2socks v1.16.11
 	github.com/fasthttp/websocket v1.4.3
 	github.com/frankban/quicktest v1.10.0 // indirect
 	github.com/go-playground/validator/v10 v10.3.0
@@ -49,11 +48,11 @@ require (
 	go.uber.org/goleak v1.1.10 // indirect
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
-	golang.org/x/mobile v0.0.0-20200721161523-bcce01171201
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1 // indirect
 	golang.org/x/text v0.3.3 // indirect
-	golang.org/x/tools v0.0.0-20200731060945-b5fad4ed8dd6 // indirect
+	golang.org/x/tools v0.0.0-20200823205832-c024452afbcd // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/ini.v1 v1.57.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.4 // indirect

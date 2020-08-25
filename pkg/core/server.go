@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"github.com/emirpasic/gods/maps/hashmap"
 	"github.com/fasthttp/websocket"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	"github.com/iyouport-org/relaybaton/pkg/socks5"
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/reuseport"
 	"go.uber.org/fx"
 	"net"
-	"relaybaton/pkg/config"
-	"relaybaton/pkg/socks5"
 	"sync"
 )
 
