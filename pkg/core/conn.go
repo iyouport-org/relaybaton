@@ -8,14 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fasthttp/websocket"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	"github.com/iyouport-org/relaybaton/pkg/socks5"
+	"github.com/iyouport-org/relaybaton/pkg/util"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
 	"net/url"
-	"relaybaton/pkg/config"
-	"relaybaton/pkg/socks5"
-	"relaybaton/pkg/util"
 	"time"
 )
 
@@ -33,6 +33,7 @@ type Conn struct {
 	localConn  gnet.Conn
 	remoteConn *websocket.Conn
 	clientConf *config.ClientGo
+	tcpConn    net.Conn
 }
 
 func NewConn(gnetConn gnet.Conn, clientConf *config.ClientGo) *Conn {
@@ -131,6 +132,24 @@ func (conn *Conn) Run() {
 		if err != nil {
 			log.Error(err)
 			conn.remoteConn.Close()
+			return
+		}
+	}
+}
+
+func (conn *Conn) DirectConnect() {
+	for {
+		b := make([]byte, 1<<16)
+		n, err := conn.tcpConn.Read(b)
+		if err != nil {
+			log.Error(err)
+			conn.tcpConn.Close()
+			return
+		}
+		err = conn.localConn.AsyncWrite(b[:n])
+		if err != nil {
+			log.Error(err)
+			conn.tcpConn.Close()
 			return
 		}
 	}

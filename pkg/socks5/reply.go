@@ -1,7 +1,7 @@
 package socks5
 
 import (
-	"relaybaton/pkg/util"
+	"github.com/iyouport-org/relaybaton/pkg/util"
 )
 
 /*

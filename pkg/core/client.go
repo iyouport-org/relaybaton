@@ -13,41 +13,51 @@ import (
 	"context"
 	"fmt"
 	"github.com/fasthttp/websocket"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	"github.com/iyouport-org/relaybaton/pkg/socks5"
 	"github.com/panjf2000/gnet"
 	"github.com/panjf2000/gnet/pool/goroutine"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/fx"
 	"net"
-	"relaybaton/pkg/config"
-	"relaybaton/pkg/socks5"
 	"strconv"
+	"time"
 )
 
 type Client struct {
 	fx.Lifecycle
 	*gnet.EventServer
+	httpServer *HTTPServer
 	*config.ConfigGo
 	*goroutine.Pool
 	conns    *Map
 	shutdown chan byte
+	router   *Router
 }
 
-func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool) *Client {
+func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, router *Router) *Client {
 	client := &Client{
 		Lifecycle: lc,
 		ConfigGo:  conf,
 		Pool:      pool,
 		conns:     NewMap(),
 		shutdown:  make(chan byte, 10),
+		router:    router,
+	}
+
+	client.httpServer = &HTTPServer{
+		Client: client,
 	}
 
 	client.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			log.Debug("start")
+
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			log.Debug("stop")
+			client.shutdown <- 0x00
 			return nil
 		},
 	})
@@ -55,7 +65,12 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool) *Cl
 }
 
 func (client *Client) Run() error {
-	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port), gnet.WithMulticore(true), gnet.WithReusePort(true), gnet.WithLogger(log.StandardLogger()))
+	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port),
+		gnet.WithMulticore(true),
+		gnet.WithReusePort(true),
+		gnet.WithLogger(log.StandardLogger()),
+		gnet.WithLoadBalancing(gnet.SourceAddrHash),
+		gnet.WithTCPKeepAlive(time.Minute))
 	if err != nil {
 		log.Error(err)
 	}
@@ -114,31 +129,55 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 				return
 			}
 			conn.cmd = request.Cmd
-			resp, err := conn.DialWs(request)
-			if err != nil {
-				log.Error(err)
-				action = gnet.Close
-				return
+			if client.router.Select(conn.dstAddr.(*net.TCPAddr).IP) {
+				resp, err := conn.DialWs(request)
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				repStr := resp.Get("reply")
+				repCode, err := strconv.Atoi(repStr)
+				if err != nil {
+					log.WithField("rep", repStr).Error(err)
+					action = gnet.Close
+					return
+				}
+				reply := socks5.NewReply(byte(repCode), socks5.ATypeIPv4, net.IPv4(127, 0, 0, 1).To4(), client.Client.Port)
+				out = reply.Pack()
+				err = client.Submit(conn.Run)
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				conn.status = StatusAccepted
+				return out, gnet.None
+			} else {
+				conn.tcpConn, err = net.Dial("tcp", conn.dstAddr.String())
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				reply := socks5.NewReply(socks5.RepSucceeded, socks5.ATypeIPv4, net.IPv4(127, 0, 0, 1).To4(), client.Client.Port)
+				out = reply.Pack()
+				err = client.Submit(conn.DirectConnect)
+				if err != nil {
+					log.Error(err)
+					action = gnet.Close
+					return
+				}
+				conn.status = StatusAccepted
+				return out, gnet.None
 			}
-			repStr := resp.Get("reply")
-			repCode, err := strconv.Atoi(repStr)
-			if err != nil {
-				log.WithField("rep", repStr).Error(err)
-				action = gnet.Close
-				return
-			}
-			reply := socks5.NewReply(byte(repCode), socks5.ATypeIPv4, net.IPv4(127, 0, 0, 1).To4(), 1081)
-			out = reply.Pack()
-			err = client.Submit(conn.Run)
-			if err != nil {
-				log.Error(err)
-				action = gnet.Close
-				return
-			}
-			conn.status = StatusAccepted
-			return out, gnet.None
 		case StatusAccepted:
-			err := conn.remoteConn.WriteMessage(websocket.BinaryMessage, frame)
+			var err error
+			if client.router.Select(conn.dstAddr.(*net.TCPAddr).IP) {
+				err = conn.remoteConn.WriteMessage(websocket.BinaryMessage, frame)
+			} else {
+				_, err = conn.tcpConn.Write(frame)
+			}
 			if err != nil {
 				log.Error(err)
 				action = gnet.Close
@@ -192,16 +231,42 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 				log.Error(cErr)
 			}
 		}
+		if conn.tcpConn != nil {
+			cErr := conn.tcpConn.Close()
+			if cErr != nil {
+				log.Error(cErr)
+			}
+		}
+		if conn.dstAddr != nil {
+			client.router.RemoveCache(conn.dstAddr.(*net.TCPAddr).IP)
+		}
 	}
 	client.conns.Delete(key)
 	return
 }
 
+func (client *Client) OnInitComplete(svr gnet.Server) (action gnet.Action) {
+	go func() {
+		err := client.httpServer.Serve()
+		log.Error(err)
+	}()
+	transparent := TransparentServer{
+		Client: client,
+	}
+	go transparent.Run()
+	go func() {
+		if !client.Client.ProxyAll {
+			err := client.router.Update()
+			if err != nil {
+				log.Error(err)
+				return
+			}
+		}
+	}()
+	return gnet.None
+}
+
 func (client *Client) OnShutdown(svr gnet.Server) {
 	log.Debug("shutdown")
 	client.Pool.Release()
-}
-
-func (client *Client) Shutdown() {
-	client.shutdown <- 0x00
 }

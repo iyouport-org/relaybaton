@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"github.com/asaskevich/govalidator"
 	log "github.com/sirupsen/logrus"
 	"net"
 )
@@ -14,9 +16,9 @@ const (
 )
 
 type DNSToml struct {
-	Type   string `mapstructure:"type" toml:"type" validate:"required"`
-	Server string `mapstructure:"server" toml:"server" validate:"required,hostname"`
-	Addr   string `mapstructure:"addr" toml:"addr" validate:"required,ip|tcp_addr"`
+	Type   string `mapstructure:"type" toml:"type" validate:"oneof='default' 'dot' 'doh',required"`
+	Server string `mapstructure:"server" toml:"server" validate:"omitempty,required,hostname|hostname_rfc1123|fqdn,required"`
+	Addr   string `mapstructure:"addr" toml:"addr" validate:"omitempty,required,ip|ip_addr|tcp_addr|udp_addr,required"`
 }
 
 type DNSGo struct {
@@ -39,6 +41,11 @@ func (dnst *DNSToml) Init() (dnsg *DNSGo, err error) {
 		}
 	case "doh":
 		dnsg.Type = DNSTypeDoH
+		if !govalidator.IsIP(dnst.Addr) {
+			err = errors.New("wrong IP address")
+			log.WithField("dns.addr", dnst.Addr).Error(err)
+			return nil, err
+		}
 		dnsg.Addr, err = net.ResolveIPAddr("ip", dnst.Addr)
 		if err != nil {
 			log.WithField("dns.addr", dnst.Addr).Error(err)

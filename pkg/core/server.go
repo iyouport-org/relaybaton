@@ -3,15 +3,17 @@ package core
 import (
 	"compress/flate"
 	"context"
+	"errors"
 	"fmt"
+	"github.com/emirpasic/gods/maps/hashmap"
 	"github.com/fasthttp/websocket"
+	"github.com/iyouport-org/relaybaton/pkg/config"
+	"github.com/iyouport-org/relaybaton/pkg/socks5"
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/reuseport"
 	"go.uber.org/fx"
 	"net"
-	"relaybaton/pkg/config"
-	"relaybaton/pkg/socks5"
 	"sync"
 )
 
@@ -19,12 +21,15 @@ type Server struct {
 	fx.Lifecycle
 	net.Listener
 	*config.ConfigGo
+	*hashmap.Map
+	mutex sync.RWMutex
 }
 
 func NewServer(lc fx.Lifecycle, conf *config.ConfigGo) *Server {
 	server := &Server{
 		Lifecycle: lc,
 		ConfigGo:  conf,
+		Map:       hashmap.New(),
 	}
 	server.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -67,6 +72,7 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	ctx.Response.Header.Add("reply", fmt.Sprintf("%d", socks5.RepSucceeded))
+	username := ctx.Request.Header.Peek("username")
 	err = upgrader.Upgrade(ctx, func(conn *websocket.Conn) {
 		err = conn.SetCompressionLevel(flate.BestCompression)
 		if err != nil {
@@ -76,16 +82,44 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 		}
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go func() {
+		bandwidth := 0
+		defer func(username string) {
+			user, err := server.getUser(username)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			user.TrafficUsed += uint(bandwidth)
+			db := server.DB.DB
+			db.AutoMigrate(&User{})
+			db.Save(user)
+		}(string(username))
+		go func(username string) {
 			for {
-				b := make([]byte, 65535)
-				n, err := c.Read(b)
-				//_, err = io.Copy(writer, c)
+				bucket, err := server.GetBucket(username)
 				if err != nil {
 					log.Error(err)
 					wg.Done()
 					return
 				}
+				readLen := bucket.Available()
+				if readLen == 0 {
+					readLen = uint64(bucket.bandwidth)
+				}
+				b := make([]byte, readLen)
+				n, err := c.Read(b)
+				if err != nil {
+					log.Error(err)
+					wg.Done()
+					return
+				}
+				err = bucket.Wait(uint(n))
+				if err != nil {
+					log.Error(err)
+					wg.Done()
+					return
+				}
+				bandwidth += n
 				err = conn.WriteMessage(websocket.BinaryMessage, b[:n])
 				if err != nil {
 					log.Error(err)
@@ -93,9 +127,8 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 					return
 				}
 			}
-		}()
-
-		go func() {
+		}(string(username))
+		go func(username string) {
 			for {
 				_, b, err := conn.ReadMessage()
 				if err != nil {
@@ -103,6 +136,7 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 					wg.Done()
 					return
 				}
+				bandwidth += len(b)
 				_, err = c.Write(b)
 				if err != nil {
 					log.Error(err)
@@ -110,7 +144,7 @@ func (server *Server) requestHandler(ctx *fasthttp.RequestCtx) {
 					return
 				}
 			}
-		}()
+		}(string(username))
 		wg.Wait()
 		err := conn.Close()
 		if err != nil {
@@ -130,24 +164,24 @@ func (server *Server) Authenticate(ctx *fasthttp.RequestCtx) bool {
 	}
 	username := string(ctx.Request.Header.Peek("username"))
 	password := string(ctx.Request.Header.Peek("password"))
-	correctPassword, err := server.getPassword(username)
+	user, err := server.getUser(username)
 	if err != nil {
 		log.Error(err)
 		return false
 	}
-	return password == correctPassword
+	return (password == user.Password) && (user.TrafficLimit > user.TrafficUsed)
 }
 
-func (server *Server) getPassword(username string) (string, error) {
+func (server *Server) getUser(username string) (*User, error) {
 	db := server.DB.DB
-	db.AutoMigrate(&User{})
-	var user User
-	err := db.Where("username = ?", username).First(&user).Error
+	user := &User{}
+	db.AutoMigrate(user)
+	err := db.Where("username = ?", username).First(user).Error
 	if err != nil {
 		log.WithField("username", username).Error(err)
-		return "", err
+		return nil, err
 	}
-	return user.Password, nil
+	return user, err
 }
 
 func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
@@ -158,12 +192,37 @@ func (server *Server) redirect(ctx *fasthttp.RequestCtx) {
 	newReq.WriteTo(log.StandardLogger().Writer())
 	rep := fasthttp.AcquireResponse()
 	err := fasthttp.Do(newReq, rep)
-
-	//rep.WriteTo(log.StandardLogger().Writer())
 	newReq.Header.Header()
 	rep.CopyTo(&ctx.Response)
 	if err != nil {
 		log.Error(err)
 		return
 	}
+}
+
+func (server *Server) GetBucket(username string) (*RateLimiter, error) {
+	server.mutex.RLock()
+	v, ok := server.Map.Get(username)
+	server.mutex.RUnlock()
+	if !ok {
+		user, err := server.getUser(username)
+		if err != nil {
+			log.WithField("username", username).Error(err)
+			return nil, err
+		}
+		log.WithField("limit", user.BandwidthLimit).Debug("bandwidth limit")
+		bucket := NewRateLimiter(user.BandwidthLimit / 2)
+		server.mutex.Lock()
+		server.Map.Put(username, bucket)
+		server.mutex.Unlock()
+		log.Debug("bucket saved")
+		return bucket, nil
+	}
+	bucket, ok := v.(*RateLimiter)
+	if !ok {
+		err := errors.New("type error")
+		log.Error(err)
+		return nil, err
+	}
+	return bucket, nil
 }

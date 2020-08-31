@@ -2,21 +2,21 @@ package config
 
 import (
 	"github.com/go-playground/validator/v10"
+	"github.com/iyouport-org/relaybaton/pkg/dns"
+	"github.com/iyouport-org/relaybaton/pkg/log"
 	"github.com/jinzhu/gorm"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"net"
-	"relaybaton/pkg/dns"
-	"relaybaton/pkg/log"
 )
 
 // ConfigTOML is the struct mapped from the configuration file
 type ConfigTOML struct {
-	Log    LogTOML    `mapstructure:"log" toml:"log" validate:"required"`
-	DNS    DNSToml    `mapstructure:"dns" toml:"dns" validate:"required"`
-	Client ClientTOML `mapstructure:"client" toml:"client" `
-	Server serverTOML `mapstructure:"server" toml:"server"  `
-	DB     dbTOML     `mapstructure:"db" toml:"db" `
+	Log    *LogTOML    `mapstructure:"log" toml:"log" validate:"required"`
+	DNS    *DNSToml    `mapstructure:"dns" toml:"dns" validate:"required"`
+	Client *ClientTOML `mapstructure:"client" toml:"client" validate:"-"`
+	Server *ServerTOML `mapstructure:"server" toml:"server" validate:"-"`
+	DB     *DBToml     `mapstructure:"db" toml:"db" validate:"-"`
 }
 
 type ConfigGo struct {
@@ -50,27 +50,20 @@ func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
 }
 
 func (conf *ConfigGo) Save(filename string) error {
-	viper.Set("client.port", conf.toml.Client.Port)
-	viper.Set("client.server", conf.toml.Client.Server)
-	viper.Set("client.username", conf.toml.Client.Username)
-	viper.Set("client.password", conf.toml.Client.Password)
-	viper.Set("client.proxy_all", conf.toml.Client.ProxyAll)
-	viper.Set("dns.type", conf.toml.DNS.Type)
-	viper.Set("dns.server", conf.toml.DNS.Server)
-	viper.Set("dns.addr", conf.toml.DNS.Addr)
-	viper.Set("log.file", conf.toml.Log.File)
-	viper.Set("log.level", conf.toml.Log.Level)
-	return viper.WriteConfigAs(filename)
-	/*file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	encoder := toml.NewEncoder(file)
-	err = encoder.Encode(conf)
-	if err != nil {
-		return err
-	}
-	return nil*/
+	v := viper.New()
+	v.Set("client.port", conf.toml.Client.Port)
+	v.Set("client.http_port", conf.toml.Client.HTTPPort)
+	v.Set("client.transparent_port", conf.toml.Client.TransparentPort)
+	v.Set("client.server", conf.toml.Client.Server)
+	v.Set("client.username", conf.toml.Client.Username)
+	v.Set("client.password", conf.toml.Client.Password)
+	v.Set("client.proxy_all", conf.toml.Client.ProxyAll)
+	v.Set("dns.type", conf.toml.DNS.Type)
+	v.Set("dns.server", conf.toml.DNS.Server)
+	v.Set("dns.addr", conf.toml.DNS.Addr)
+	v.Set("log.file", conf.toml.Log.File)
+	v.Set("log.level", conf.toml.Log.Level)
+	return v.WriteConfigAs(filename)
 }
 
 func NewConf() *ConfigGo {
@@ -97,21 +90,41 @@ func NewConf() *ConfigGo {
 	return conf
 }
 
-func NewConfClient() (conf *ConfigGo, err error) {
-	conf = NewConf()
+func (conf *ConfigGo) InitClient() error {
+	validate := validator.New()
+	err := validate.Struct(conf.toml.Client)
+	if err != nil {
+		logrus.Error(err)
+		return err
+	}
 	conf.Client, err = conf.toml.Client.Init()
 	if err != nil {
 		logrus.Error(err)
-		return nil, err
+		return err
 	}
-	return conf, nil
+	return nil
+}
+
+func NewConfClient() (conf *ConfigGo, err error) {
+	conf = NewConf()
+	err = conf.InitClient()
+	return
 }
 
 func NewConfServer() (conf *ConfigGo, err error) {
 	conf = NewConf()
+	validate := validator.New()
+	err = validate.Struct(conf.toml.Server)
+	if err != nil {
+		return nil, err
+	}
 	conf.Server, err = conf.toml.Server.Init()
 	if err != nil {
 		logrus.Error(err)
+		return nil, err
+	}
+	err = validate.Struct(conf.toml.DB)
+	if err != nil {
 		return nil, err
 	}
 	conf.DB, err = conf.toml.DB.Init()
@@ -128,6 +141,24 @@ func InitLog(conf *ConfigGo) {
 	logrus.SetLevel(conf.Log.Level)
 	if conf.DB == nil {
 		db, err := gorm.Open("sqlite3", "log.db")
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		db.AutoMigrate(&log.Record{})
+		logrus.AddHook(log.NewSQLiteHook(db))
+	} else {
+		conf.DB.DB.AutoMigrate(&log.Record{})
+		logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))
+	}
+}
+
+func InitLogMobile(conf *ConfigGo) {
+	logrus.SetFormatter(log.XMLFormatter{})
+	logrus.SetOutput(conf.Log.File)
+	logrus.SetLevel(conf.Log.Level)
+	if conf.DB == nil {
+		db, err := gorm.Open("sqlite3", "/data/data/org.iyouport.relaybaton_mobile/files/log.db")
 		if err != nil {
 			logrus.Error(err)
 			return
