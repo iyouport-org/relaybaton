@@ -153,6 +153,24 @@ func InitLog(conf *ConfigGo) {
 	}
 }
 
+func InitLogMobile(conf *ConfigGo) {
+	logrus.SetFormatter(log.XMLFormatter{})
+	logrus.SetOutput(conf.Log.File)
+	logrus.SetLevel(conf.Log.Level)
+	if conf.DB == nil {
+		db, err := gorm.Open("sqlite3", "/data/data/org.iyouport.relaybaton_mobile/files/log.db")
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		db.AutoMigrate(&log.Record{})
+		logrus.AddHook(log.NewSQLiteHook(db))
+	} else {
+		conf.DB.DB.AutoMigrate(&log.Record{})
+		logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))
+	}
+}
+
 func InitDNS(conf *ConfigGo) {
 	switch conf.DNS.Type {
 	case DNSTypeDoT:

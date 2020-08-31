@@ -23,6 +23,7 @@ import (
 )
 
 var reservedIP []*net.IPNet
+var IsMobile bool
 
 type Router struct {
 	on             bool
@@ -49,16 +50,21 @@ func NewRouter(conf *config.ConfigGo) (*Router, error) {
 		conf:    conf,
 		hashMap: hashmap.New(),
 	}
-	ex, err := os.Executable()
-	if err != nil {
-		log.Error(err)
-		return nil, err
+	var exPath string
+	if !IsMobile {
+		ex, err := os.Executable()
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+		exPath = filepath.Dir(ex)
+	} else {
+		exPath = "/data/data/org.iyouport.relaybaton_mobile/files/"
 	}
-	exPath := filepath.Dir(ex)
 	router.compressedPath = exPath + "/geoip.mmdb.tar.gz"
 	router.mmdbPath = exPath + "/geoip.mmdb"
 	log.Debug(exPath) //test
-	_, err = os.Stat(router.mmdbPath)
+	_, err := os.Stat(router.mmdbPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			router.SwitchOff()

@@ -65,11 +65,6 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, rou
 }
 
 func (client *Client) Run() error {
-	go client.httpServer.Serve()
-	transparent := TransparentServer{
-		Client: client,
-	}
-	go transparent.Run()
 	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port),
 		gnet.WithMulticore(true),
 		gnet.WithReusePort(true),
@@ -248,6 +243,27 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	}
 	client.conns.Delete(key)
 	return
+}
+
+func (client *Client) OnInitComplete(svr gnet.Server) (action gnet.Action) {
+	go func() {
+		err := client.httpServer.Serve()
+		log.Error(err)
+	}()
+	transparent := TransparentServer{
+		Client: client,
+	}
+	go transparent.Run()
+	go func() {
+		if !client.Client.ProxyAll {
+			err := client.router.Update()
+			if err != nil {
+				log.Error(err)
+				return
+			}
+		}
+	}()
+	return gnet.None
 }
 
 func (client *Client) OnShutdown(svr gnet.Server) {

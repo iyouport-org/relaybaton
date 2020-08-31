@@ -11,8 +11,8 @@ type ServerTOML struct {
 }
 
 type serverGo struct {
-	Port     uint16
-	Pretend  *url.URL
+	Port    uint16
+	Pretend *url.URL
 }
 
 func (st *ServerTOML) Init() (sg *serverGo, err error) {

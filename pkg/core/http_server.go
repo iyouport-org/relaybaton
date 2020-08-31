@@ -45,15 +45,7 @@ func (server *HTTPServer) Serve() error {
 			log.Error(err)
 		}
 	}()
-	go server.once.Do(func() {
-		if !server.Client.Client.ProxyAll {
-			err := server.Client.router.Update()
-			if err != nil {
-				log.Error(err)
-				return
-			}
-		}
-	})
+
 	return nil
 }
 

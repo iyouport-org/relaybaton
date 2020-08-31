@@ -70,7 +70,7 @@ mobile: go
 	GO111MODULE="off" go get golang.org/x/mobile/cmd/gomobile
 	GO111MODULE="off" go get golang.org/x/mobile/cmd/gobind
 	GO111MODULE="off" gomobile init
-	GOROOT=$(GOROOT_LOCAL) GO111MODULE="off"  $(GOPATH_ENV)/bin/gomobile bind -v -o bin/relaybaton.aar -target=android  $(PRJ_DIR)/cmd/android
+	GOROOT=$(GOROOT_LOCAL) GO111MODULE="off"  $(GOPATH_ENV)/bin/gomobile bind -v -o bin/relaybaton_mobile.aar -target=android  $(PRJ_DIR)/cmd/relaybaton_mobile
 
 cross_windows: go
 	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -o $(PRJ_DIR)/bin/relaybaton.exe $(PRJ_DIR)/cmd/cli/main.go

@@ -35,13 +35,13 @@ func NewDoHResolverFactory(dialer net.Dialer, port uint16, serverName string, ad
 		addr:         addr,
 		strictErrors: strictErrors,
 		server: dns.Server{
-			Addr: fmt.Sprintf(":%d", port),
+			Addr: fmt.Sprintf("127.0.0.1:%d", port),
 			Net:  "tcp",
 		},
 		client: http.Client{
 			Transport: &http.Transport{
 				Proxy: nil,
-				DialTLS: func(_, _ string) (net.Conn, error) {
+				DialTLSContext: func(_ context.Context, _, _ string) (net.Conn, error) {
 					return tls.Dial("tcp", addr.String()+":443", &tls.Config{
 						ServerName: u.Hostname(),
 					})
@@ -90,7 +90,6 @@ func (factory *DoHResolverFactory) getDialFunction() func(ctx context.Context, n
 }
 
 func (factory *DoHResolverFactory) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
-	//log.Debug(r.String())	//test
 	m := new(dns.Msg)
 	m.SetReply(r)
 	wire, err := r.Pack()
