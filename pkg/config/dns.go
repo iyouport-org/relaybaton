@@ -2,9 +2,10 @@ package config
 
 import (
 	"errors"
+	"net"
+
 	"github.com/asaskevich/govalidator"
 	log "github.com/sirupsen/logrus"
-	"net"
 )
 
 type DNSType string

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+
 	log "github.com/sirupsen/logrus"
 )
 

@@ -1,28 +1,21 @@
 package config
 
-import (
-	log "github.com/sirupsen/logrus"
-	"net/url"
-)
+const DEFAULT_ADMIN_USERNAME = "admin"
 
 type ServerTOML struct {
-	Port    int    `mapstructure:"port" toml:"port" validate:"numeric,gte=0,lte=65535,required"`
-	Pretend string `mapstructure:"pretend" toml:"pretend" validate:"required"`
+	Port          int    `mapstructure:"port" toml:"port" validate:"numeric,gte=0,lte=65535,required"`
+	AdminPassword string `mapstructure:"admin_password" toml:"pretend" validate:"required"`
 }
 
 type serverGo struct {
-	Port    uint16
-	Pretend *url.URL
+	Port          uint16
+	AdminPassword string
 }
 
 func (st *ServerTOML) Init() (sg *serverGo, err error) {
 	sg = &serverGo{
-		Port: uint16(st.Port),
-	}
-	sg.Pretend, err = url.Parse(st.Pretend)
-	if err != nil {
-		log.WithField("server.pretend", st.Pretend).Error(err)
-		return nil, err
+		Port:          uint16(st.Port),
+		AdminPassword: st.AdminPassword,
 	}
 	return sg, nil
 }

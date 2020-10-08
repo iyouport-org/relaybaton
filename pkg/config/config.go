@@ -1,13 +1,14 @@
 package config
 
 import (
+	"net"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/iyouport-org/relaybaton/pkg/dns"
 	"github.com/iyouport-org/relaybaton/pkg/log"
-	"github.com/jinzhu/gorm"
+	"github.com/iyouport-org/relaybaton/pkg/model"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"net"
 )
 
 // ConfigTOML is the struct mapped from the configuration file
@@ -49,11 +50,11 @@ func (mc *ConfigTOML) Init() (cg *ConfigGo, err error) {
 	return cg, nil
 }
 
-func (conf *ConfigGo) Save(filename string) error {
+func (conf *ConfigGo) SaveClient(filename string) error {
 	v := viper.New()
 	v.Set("client.port", conf.toml.Client.Port)
 	v.Set("client.http_port", conf.toml.Client.HTTPPort)
-	v.Set("client.transparent_port", conf.toml.Client.TransparentPort)
+	v.Set("client.redir_port", conf.toml.Client.RedirPort)
 	v.Set("client.server", conf.toml.Client.Server)
 	v.Set("client.username", conf.toml.Client.Username)
 	v.Set("client.password", conf.toml.Client.Password)
@@ -139,36 +140,11 @@ func InitLog(conf *ConfigGo) {
 	logrus.SetFormatter(log.XMLFormatter{})
 	logrus.SetOutput(conf.Log.File)
 	logrus.SetLevel(conf.Log.Level)
-	if conf.DB == nil {
-		db, err := gorm.Open("sqlite3", "log.db")
-		if err != nil {
-			logrus.Error(err)
-			return
-		}
-		db.AutoMigrate(&log.Record{})
-		logrus.AddHook(log.NewSQLiteHook(db))
-	} else {
-		conf.DB.DB.AutoMigrate(&log.Record{})
-		logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))
+	if conf.DB != nil {
+		conf.DB.DB.AutoMigrate(&model.Log{})
+		//logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))	//TODO
 	}
-}
 
-func InitLogMobile(conf *ConfigGo) {
-	logrus.SetFormatter(log.XMLFormatter{})
-	logrus.SetOutput(conf.Log.File)
-	logrus.SetLevel(conf.Log.Level)
-	if conf.DB == nil {
-		db, err := gorm.Open("sqlite3", "/data/data/org.iyouport.relaybaton_mobile/files/log.db")
-		if err != nil {
-			logrus.Error(err)
-			return
-		}
-		db.AutoMigrate(&log.Record{})
-		logrus.AddHook(log.NewSQLiteHook(db))
-	} else {
-		conf.DB.DB.AutoMigrate(&log.Record{})
-		logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))
-	}
 }
 
 func InitDNS(conf *ConfigGo) {

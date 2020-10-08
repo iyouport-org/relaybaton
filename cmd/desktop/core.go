@@ -3,6 +3,11 @@ package main
 import (
 	"C"
 	"context"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"strings"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/iyouport-org/relaybaton/internal/cmd/relaybaton"
 	"github.com/iyouport-org/relaybaton/pkg/config"
@@ -11,10 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
-	"os"
-	"path/filepath"
-	"runtime/debug"
-	"strings"
 )
 
 var app *fx.App
@@ -38,12 +39,12 @@ func Init() {
 }
 
 //export OpenConfFile
-func OpenConfFile(filePath *C.char) (clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
+func OpenConfFile(filePath *C.char) (clientPort C.int, clientHTTPPort C.int, clientRedirPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
 	DNSType *C.char, DNSServer *C.char, DNSAddr *C.char,
 	logFile *C.char, logLevel *C.char, ret *C.char) {
 	clientPort = C.int(0)
 	clientHTTPPort = C.int(0)
-	clientTransparentPort = C.int(0)
+	clientRedirPort = C.int(0)
 	clientServer = C.CString("")
 	clientUsername = C.CString("")
 	clientPassword = C.CString("")
@@ -85,7 +86,7 @@ func OpenConfFile(filePath *C.char) (clientPort C.int, clientHTTPPort C.int, cli
 	}
 	clientPort = C.int(confTOML.Client.Port)
 	clientHTTPPort = C.int(confTOML.Client.HTTPPort)
-	clientTransparentPort = C.int(confTOML.Client.TransparentPort)
+	clientRedirPort = C.int(confTOML.Client.RedirPort)
 	clientServer = C.CString(confTOML.Client.Server)
 	clientUsername = C.CString(confTOML.Client.Username)
 	clientPassword = C.CString(confTOML.Client.Password)
@@ -104,7 +105,7 @@ func OpenConfFile(filePath *C.char) (clientPort C.int, clientHTTPPort C.int, cli
 
 //export SaveConfFile
 func SaveConfFile(filePath *C.char,
-	clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
+	clientPort C.int, clientHTTPPort C.int, clientRedirPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
 	DNSType *C.char, DNSServer *C.char, DNSAddr *C.char,
 	logFile *C.char, logLevel *C.char) *C.char {
 	var proxyAll bool
@@ -125,13 +126,13 @@ func SaveConfFile(filePath *C.char,
 			Addr:   C.GoString(DNSAddr),
 		},
 		Client: &config.ClientTOML{
-			Port:            int(clientPort),
-			HTTPPort:        int(clientHTTPPort),
-			TransparentPort: int(clientTransparentPort),
-			Server:          C.GoString(clientServer),
-			Username:        C.GoString(clientUsername),
-			Password:        C.GoString(clientPassword),
-			ProxyAll:        proxyAll,
+			Port:      int(clientPort),
+			HTTPPort:  int(clientHTTPPort),
+			RedirPort: int(clientRedirPort),
+			Server:    C.GoString(clientServer),
+			Username:  C.GoString(clientUsername),
+			Password:  C.GoString(clientPassword),
+			ProxyAll:  proxyAll,
 		},
 	}
 	err := validate.Struct(conf)
@@ -150,7 +151,7 @@ func SaveConfFile(filePath *C.char,
 	if err != nil {
 		return C.CString(err.Error())
 	}
-	err = confGo.Save(C.GoString(filePath))
+	err = confGo.SaveClient(C.GoString(filePath))
 	if err != nil {
 		return C.CString(err.Error())
 	}
@@ -158,7 +159,7 @@ func SaveConfFile(filePath *C.char,
 }
 
 //export Validate
-func Validate(clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
+func Validate(clientPort C.int, clientHTTPPort C.int, clientRedirPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
 	DNSType *C.char, DNSServer *C.char, DNSAddr *C.char,
 	logFile *C.char, logLevel *C.char) *C.char {
 	var proxyAll bool
@@ -179,13 +180,13 @@ func Validate(clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.in
 			Addr:   C.GoString(DNSAddr),
 		},
 		Client: &config.ClientTOML{
-			Port:            int(clientPort),
-			HTTPPort:        int(clientHTTPPort),
-			TransparentPort: int(clientTransparentPort),
-			Server:          C.GoString(clientServer),
-			Username:        C.GoString(clientUsername),
-			Password:        C.GoString(clientPassword),
-			ProxyAll:        proxyAll,
+			Port:      int(clientPort),
+			HTTPPort:  int(clientHTTPPort),
+			RedirPort: int(clientRedirPort),
+			Server:    C.GoString(clientServer),
+			Username:  C.GoString(clientUsername),
+			Password:  C.GoString(clientPassword),
+			ProxyAll:  proxyAll,
 		},
 	}
 	err := validate.Struct(conf)
@@ -200,7 +201,7 @@ func Validate(clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.in
 }
 
 //export Run
-func Run(clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
+func Run(clientPort C.int, clientHTTPPort C.int, clientRedirPort C.int, clientServer *C.char, clientUsername *C.char, clientPassword *C.char, clientProxyAll C.int,
 	DNSType *C.char, DNSServer *C.char, DNSAddr *C.char,
 	logFile *C.char, logLevel *C.char) *C.char {
 	var proxyAll bool
@@ -226,13 +227,13 @@ func Run(clientPort C.int, clientHTTPPort C.int, clientTransparentPort C.int, cl
 						Addr:   C.GoString(DNSAddr),
 					},
 					Client: &config.ClientTOML{
-						Port:            int(clientPort),
-						HTTPPort:        int(clientHTTPPort),
-						TransparentPort: int(clientTransparentPort),
-						Server:          C.GoString(clientServer),
-						Username:        C.GoString(clientUsername),
-						Password:        C.GoString(clientPassword),
-						ProxyAll:        proxyAll,
+						Port:      int(clientPort),
+						HTTPPort:  int(clientHTTPPort),
+						RedirPort: int(clientRedirPort),
+						Server:    C.GoString(clientServer),
+						Username:  C.GoString(clientUsername),
+						Password:  C.GoString(clientPassword),
+						ProxyAll:  proxyAll,
 					},
 				}
 				confGo, err := conf.Init()

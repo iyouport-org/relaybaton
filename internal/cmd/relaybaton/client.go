@@ -2,6 +2,7 @@ package relaybaton
 
 import (
 	"context"
+
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/iyouport-org/relaybaton/pkg/core"
 	"github.com/panjf2000/gnet/pool/goroutine"

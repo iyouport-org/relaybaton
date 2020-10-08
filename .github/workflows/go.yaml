@@ -25,5 +25,8 @@ jobs:
       - name: Get dependencies
         run: go mod vendor
 
-      - name: Build
+      - name: Build core
         run: make
+
+      - name: Build C++ static lib
+        run: make desktop

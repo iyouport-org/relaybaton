@@ -1,9 +1,10 @@
 package core
 
 import (
+	"net"
+
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"net"
 )
 
 type TCPSegmentConn struct {

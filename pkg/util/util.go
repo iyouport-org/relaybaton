@@ -3,10 +3,11 @@ package util
 import (
 	"encoding/binary"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func Uint16ToBytes(n uint16) []byte {

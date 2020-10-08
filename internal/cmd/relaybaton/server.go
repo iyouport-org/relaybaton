@@ -2,6 +2,7 @@ package relaybaton
 
 import (
 	"context"
+
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/iyouport-org/relaybaton/pkg/core"
 	log "github.com/sirupsen/logrus"
@@ -24,7 +25,6 @@ func serverExec(cmd *cobra.Command, args []string) {
 		fx.Provide(
 			core.NewServer,
 			config.NewConfServer,
-			//goroutine.Default,
 		),
 		fx.Logger(log.StandardLogger()),
 		fx.Populate(&server),

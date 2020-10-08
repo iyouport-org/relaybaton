@@ -1,14 +1,15 @@
-package log
+package model
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/gorm"
-	"github.com/sirupsen/logrus"
 	"runtime/debug"
+
+	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
-type Record struct {
+type Log struct {
 	gorm.Model
 	Level  uint32
 	Func   string
@@ -18,7 +19,7 @@ type Record struct {
 	Fields string
 }
 
-func NewRecord(entry *logrus.Entry) *Record {
+func NewRecord(entry *logrus.Entry) *Log {
 	data, err := json.Marshal(map[string]interface{}(entry.Data))
 	if err != nil {
 		data = []byte{}
@@ -32,7 +33,7 @@ func NewRecord(entry *logrus.Entry) *Record {
 		function = ""
 		file = ""
 	}
-	return &Record{
+	return &Log{
 		Model: gorm.Model{
 			CreatedAt: entry.Time,
 			UpdatedAt: entry.Time,
@@ -46,6 +47,6 @@ func NewRecord(entry *logrus.Entry) *Record {
 	}
 }
 
-func (record Record) TableName() string {
+func (record Log) TableName() string {
 	return "log"
 }

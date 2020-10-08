@@ -12,6 +12,10 @@ Client connection status
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
+	"time"
+
 	"github.com/fasthttp/websocket"
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/iyouport-org/relaybaton/pkg/socks5"
@@ -19,9 +23,6 @@ import (
 	"github.com/panjf2000/gnet/pool/goroutine"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/fx"
-	"net"
-	"strconv"
-	"time"
 )
 
 type Client struct {
@@ -156,7 +157,7 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 			} else {
 				conn.tcpConn, err = net.Dial("tcp", conn.dstAddr.String())
 				if err != nil {
-					log.Error(err)
+					log.WithField("Dst Addr", conn.dstAddr.String()).Error(err)
 					action = gnet.Close
 					return
 				}
@@ -242,7 +243,7 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 		}
 	}
 	client.conns.Delete(key)
-	return
+	return gnet.None
 }
 
 func (client *Client) OnInitComplete(svr gnet.Server) (action gnet.Action) {
@@ -250,7 +251,7 @@ func (client *Client) OnInitComplete(svr gnet.Server) (action gnet.Action) {
 		err := client.httpServer.Serve()
 		log.Error(err)
 	}()
-	transparent := TransparentServer{
+	transparent := RedirServer{
 		Client: client,
 	}
 	go transparent.Run()

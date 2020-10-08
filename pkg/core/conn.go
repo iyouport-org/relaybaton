@@ -3,20 +3,22 @@ package core
 import (
 	"compress/flate"
 	"context"
+	"crypto/sha512"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"net/url"
+	"time"
+
 	"github.com/fasthttp/websocket"
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/iyouport-org/relaybaton/pkg/socks5"
 	"github.com/iyouport-org/relaybaton/pkg/util"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
-	"net"
-	"net/http"
-	"net/url"
-	"time"
 )
 
 const (
@@ -158,7 +160,12 @@ func (conn *Conn) DirectConnect() {
 func (conn *Conn) buildHeader() (http.Header, error) {
 	header := http.Header{}
 	header.Add("username", conn.clientConf.Username)
-	header.Add("password", conn.clientConf.Password)
+	if conn.clientConf.Username == "admin" {
+		header.Add("password", conn.clientConf.Password)
+	} else {
+		sha512key := sha512.Sum512([]byte(conn.clientConf.Password))
+		header.Add("password", base64.StdEncoding.EncodeToString(sha512key[:]))
+	}
 	header.Add("network", "tcp") //TODO
 	header.Add("addr", conn.dstAddr.String())
 	header.Add("cmd", fmt.Sprintf("%d", conn.cmd))

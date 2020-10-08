@@ -3,10 +3,11 @@ package relaybaton_mobile
 import (
 	"context"
 	"fmt"
+	"net"
+
 	"github.com/eycorsican/go-tun2socks/core"
 	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
-	"net"
 )
 
 type udpHandler struct {

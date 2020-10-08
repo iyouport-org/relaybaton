@@ -5,12 +5,13 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
-	"github.com/miekg/dns"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+
+	"github.com/miekg/dns"
+	log "github.com/sirupsen/logrus"
 )
 
 type DoHResolverFactory struct {

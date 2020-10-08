@@ -1,9 +1,11 @@
 package log
 
 import (
-	"github.com/jinzhu/gorm"
-	"github.com/sirupsen/logrus"
 	"sync"
+
+	"github.com/iyouport-org/relaybaton/pkg/model"
+	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 type SQLiteHook struct {
@@ -22,9 +24,7 @@ func (hook *SQLiteHook) Levels() []logrus.Level {
 }
 
 func (hook *SQLiteHook) Fire(entry *logrus.Entry) error {
-	record := NewRecord(entry)
-	//hook.mutex.Lock()
-	//defer hook.mutex.Unlock()
+	record := model.NewRecord(entry)
 	hook.db.Create(record)
 	return nil
 }
