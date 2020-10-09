@@ -76,7 +76,7 @@ cross_windows: go
 	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -ldflags="-s -w" -gcflags="-trimpath=$(go env GOPATH)" -asmflags=-trimpath=$(go env GOPATH) -o $(PRJ_DIR)/bin/relaybaton.exe $(PRJ_DIR)/cmd/cli/main.go
 
 cross_mac: go
-	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -gcflags=-trimpath="-trimpath=$(go env GOPATH) -s -w" -asmflags=-trimpath=$(go env GOPATH) -o $(PRJ_DIR)/bin/relaybaton+darwin $(PRJ_DIR)/cmd/cli/main.go
+	GOROOT=$(GOROOT_LOCAL) GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=o64-clang CC=o64-clang CC_FOR_darwin_amd64=o64-clang CXX=o64-clang++ CXX_FOR_TARGET=o64-clang++ CXX_FOR_darwin_amd64=o64-clang++ go build -ldflags="-s -w" -gcflags="-trimpath=$(go env GOPATH)" -asmflags=-trimpath=$(go env GOPATH) -o $(PRJ_DIR)/bin/relaybaton+darwin $(PRJ_DIR)/cmd/cli/main.go
 
 cross_windows_desktop: go
 	GOROOT=$(GOROOT_LOCAL) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC_FOR_TARGET=x86_64-w64-mingw32-gcc CC=x86_64-w64-mingw32-gcc CC_FOR_windows_amd64=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ CXX_FOR_TARGET=x86_64-w64-mingw32-g++ CXX_FOR_windows_amd64=x86_64-w64-mingw32-g++ go build -ldflags="-s -w" -gcflags="-trimpath=$(go env GOPATH)" -asmflags=-trimpath=$(go env GOPATH) -buildmode=c-archive -o $(PRJ_DIR)/bin/core.lib $(PRJ_DIR)/cmd/desktop/core.go
