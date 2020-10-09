@@ -142,7 +142,7 @@ func InitLog(conf *ConfigGo) {
 	logrus.SetLevel(conf.Log.Level)
 	if conf.DB != nil {
 		conf.DB.DB.AutoMigrate(&model.Log{})
-		//logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))	//TODO
+		logrus.AddHook(log.NewSQLiteHook(conf.DB.DB))
 	}
 
 }

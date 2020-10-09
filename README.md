@@ -3,7 +3,7 @@
 A pluggable transport to circumvent Internet censorship with Encrypted SNI.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GoDoc](https://godoc.org/github.com/iyouport-org/relaybaton?status.svg)](https://godoc.org/github.com/iyouport-org/relaybaton)
+[![GoDoc](https://godoc.org/github.com/iyouport-org/relaybaton?status.svg)](https://pkg.go.dev/github.com/iyouport-org/relaybaton)
 [![Go Report Card](https://goreportcard.com/badge/github.com/iyouport-org/relaybaton)](https://goreportcard.com/report/github.com/iyouport-org/relaybaton)
 
 ## Getting Started
@@ -76,7 +76,7 @@ proxy_all = true
 
 [server]
 port = 80
-pretend = "https://www.kernel.org"
+admin_password = "password"
 
 [db]
 type = "sqlite3"
@@ -99,28 +99,28 @@ level = "trace"
 
 ### Description of the fields
 
-|       Field       | TOML Type |                      Go Type                      |                       Description                        |
-| :---------------: | :-------: | :-----------------------------------------------: | :------------------------------------------------------: |
-|    client.port    |  Integer  |                      uint16                       |            SOCKS5 port that client listen to             |
-| client.http_port  |  Integer  |                      uint16                       |             HTTP port that client listen to              |
-| client.redir_port |  Integer  |                      uint16                       |           Redirect port that client listen to            |
-|   client.server   |  String   |                      string                       |                domain name of the server                 |
-|  client.username  |  String   |                      string                       |                  username of the client                  |
-|  client.password  |  String   |                      string                       |                  password of the client                  |
-| client.proxy_all  |  Boolean  |                       bool                        |                   if proxy all traffic                   |
-|    server.port    |  Integer  |                      uint16                       |                port that server listen to                |
-|  server.pretend   |  String   |                      url.URL                      | domain name of the website that the server pretend to be |
-|      db.type      |  String   | github.com/iyouport-org/relaybaton config.dbType  |                   type of the database                   |
-|    db.username    |  String   |                      string                       |             username for database connection             |
-|    db.password    |  String   |                      string                       |             password for database connection             |
-|      db.host      |  String   |                      string                       |             hostname for database connection             |
-|      db.port      |  Integer  |                      uint16                       |               port for database connection               |
-|    db.database    |  String   |                      string                       |                     name of database                     |
-|     dns.type      |  String   | github.com/iyouport-org/relaybaton config.DNSType |                   type of DNS resolver                   |
-|    dns.server     |  String   |                      string                       |              server name of the DNS server               |
-|     dns.addr      |  String   |                     net.Addr                      |               IP address of the DNS server               |
-|     log.file      |  String   |                      os.File                      |                   filename of log file                   |
-|     log.level     |  String   |      github.com/sirupsen/logrus logrus.Level      |                minimum log level to write                |
+|         Field         | TOML Type |                      Go Type                      |             Description             |
+| :-------------------: | :-------: | :-----------------------------------------------: | :---------------------------------: |
+|      client.port      |  Integer  |                      uint16                       |  SOCKS5 port that client listen to  |
+|   client.http_port    |  Integer  |                      uint16                       |   HTTP port that client listen to   |
+|   client.redir_port   |  Integer  |                      uint16                       | Redirect port that client listen to |
+|     client.server     |  String   |                      string                       |      domain name of the server      |
+|    client.username    |  String   |                      string                       |       username of the client        |
+|    client.password    |  String   |                      string                       |       password of the client        |
+|   client.proxy_all    |  Boolean  |                       bool                        |        if proxy all traffic         |
+|      server.port      |  Integer  |                      uint16                       |     port that server listen to      |
+| server.admin_password |  String   |                      string                       |     password of account "admin"     |
+|        db.type        |  String   | github.com/iyouport-org/relaybaton config.dbType  |        type of the database         |
+|      db.username      |  String   |                      string                       |  username for database connection   |
+|      db.password      |  String   |                      string                       |  password for database connection   |
+|        db.host        |  String   |                      string                       |  hostname for database connection   |
+|        db.port        |  Integer  |                      uint16                       |    port for database connection     |
+|      db.database      |  String   |                      string                       |          name of database           |
+|       dns.type        |  String   | github.com/iyouport-org/relaybaton config.DNSType |        type of DNS resolver         |
+|      dns.server       |  String   |                      string                       |    server name of the DNS server    |
+|       dns.addr        |  String   |                     net.Addr                      |    IP address of the DNS server     |
+|       log.file        |  String   |                      os.File                      |        filename of log file         |
+|       log.level       |  String   |      github.com/sirupsen/logrus logrus.Level      |     minimum log level to write      |
 
 ## Built With
 
