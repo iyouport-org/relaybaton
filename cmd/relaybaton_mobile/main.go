@@ -115,7 +115,7 @@ func (android *RelaybatonAndroid) Run() error {
 func (android *RelaybatonAndroid) Save(clientServer string, clientUser string, clientPassword string, clientProxyAll bool, DNSType string, DNSServer string, DNSAddr string, logLevel string) error {
 	confTOML := config.ConfigTOML{
 		Log: &config.LogTOML{
-			File:  "/data/data/org.iyouport.relaybaton_mobile/files/log.xml",
+			File:  "/data/data/org.iyouport.relaybaton_android/files/log.xml",
 			Level: logLevel,
 		},
 		DNS: &config.DNSToml{
@@ -143,7 +143,7 @@ func (android *RelaybatonAndroid) Save(clientServer string, clientUser string, c
 		log.Error(err)
 		return &AndroidError{err}
 	}
-	err = conf.SaveClient("/data/data/org.iyouport.relaybaton_mobile/files/config.toml")
+	err = conf.SaveClient("/data/data/org.iyouport.relaybaton_android/files/config.toml")
 	if err != nil {
 		log.Error(err)
 		return &AndroidError{err}
