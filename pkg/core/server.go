@@ -101,6 +101,7 @@ func (server *Server) Run() {
 		return
 	}
 	binary.BigEndian.PutUint64(sessionTime, uint64(time.Now().UnixNano()))
+
 	r := gin.Default()
 	r.LoadHTMLFiles("web/index.html")
 	r.Use(static.Serve("/", static.LocalFile("./web", false)))
