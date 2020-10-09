@@ -1,7 +1,7 @@
 [client]
 port = 1080
 http_port = 1088
-transparent_port = 1090
+redir_port = 1090
 server = "example.com"
 username = "username"
 password = "password"

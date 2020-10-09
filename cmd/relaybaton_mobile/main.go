@@ -3,6 +3,9 @@ package relaybaton_mobile
 import (
 	"bytes"
 	"context"
+	"os"
+	"runtime/debug"
+
 	tun2socks "github.com/eycorsican/go-tun2socks/core"
 	"github.com/eycorsican/go-tun2socks/proxy/socks"
 	"github.com/go-playground/validator/v10"
@@ -12,8 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
-	"os"
-	"runtime/debug"
 )
 
 var lwipStack tun2socks.LWIPStack
@@ -95,7 +96,7 @@ func (android *RelaybatonAndroid) Run() error {
 			core.NewClient,
 		),
 		fx.Logger(log.StandardLogger()),
-		fx.Invoke(config.InitLogMobile, config.InitDNS),
+		fx.Invoke(config.InitLog, config.InitDNS),
 		fx.Populate(&android.client),
 	)
 	err := android.app.Start(android.ctx)
@@ -114,7 +115,7 @@ func (android *RelaybatonAndroid) Run() error {
 func (android *RelaybatonAndroid) Save(clientServer string, clientUser string, clientPassword string, clientProxyAll bool, DNSType string, DNSServer string, DNSAddr string, logLevel string) error {
 	confTOML := config.ConfigTOML{
 		Log: &config.LogTOML{
-			File:  "/data/data/org.iyouport.relaybaton_mobile/files/log.xml",
+			File:  "/data/data/org.iyouport.relaybaton_android/files/log.xml",
 			Level: logLevel,
 		},
 		DNS: &config.DNSToml{
@@ -123,13 +124,13 @@ func (android *RelaybatonAndroid) Save(clientServer string, clientUser string, c
 			Addr:   DNSAddr,
 		},
 		Client: &config.ClientTOML{
-			Port:            1080,
-			HTTPPort:        1088,
-			TransparentPort: 1090,
-			Server:          clientServer,
-			Username:        clientUser,
-			Password:        clientPassword,
-			ProxyAll:        clientProxyAll,
+			Port:      1080,
+			HTTPPort:  1088,
+			RedirPort: 1090,
+			Server:    clientServer,
+			Username:  clientUser,
+			Password:  clientPassword,
+			ProxyAll:  clientProxyAll,
 		},
 	}
 	conf, err := confTOML.Init()
@@ -142,7 +143,7 @@ func (android *RelaybatonAndroid) Save(clientServer string, clientUser string, c
 		log.Error(err)
 		return &AndroidError{err}
 	}
-	err = conf.Save("/data/data/org.iyouport.relaybaton_mobile/files/config.toml")
+	err = conf.SaveClient("/data/data/org.iyouport.relaybaton_android/files/config.toml")
 	if err != nil {
 		log.Error(err)
 		return &AndroidError{err}

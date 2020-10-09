@@ -2,9 +2,10 @@ package core
 
 import (
 	"fmt"
-	"github.com/emirpasic/gods/maps/hashmap"
 	"net"
 	"sync"
+
+	"github.com/emirpasic/gods/maps/hashmap"
 )
 
 type Map struct {

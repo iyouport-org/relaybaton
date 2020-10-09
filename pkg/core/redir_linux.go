@@ -6,25 +6,26 @@ package core
 import (
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"strconv"
 	"syscall"
 	"unsafe"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/proxy"
 )
 
 const SO_ORIGINAL_DST = 80
 
-type TransparentServer struct {
+type RedirServer struct {
 	Client   *Client
 	listener net.Listener
 }
 
-func (server *TransparentServer) Run() {
+func (server *RedirServer) Run() {
 	var err error
-	server.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", server.Client.Client.TransparentPort))
+	server.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", server.Client.Client.RedirPort))
 	if err != nil {
 		log.Error(err)
 		return

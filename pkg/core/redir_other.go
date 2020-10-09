@@ -4,11 +4,11 @@ package core
 
 import "net"
 
-type TransparentServer struct {
+type RedirServer struct {
 	Client   *Client
 	listener net.Listener
 }
 
-func (server *TransparentServer) Run() {
+func (server *RedirServer) Run() {
 
 }

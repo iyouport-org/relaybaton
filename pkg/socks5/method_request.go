@@ -3,6 +3,7 @@ package socks5
 import (
 	"bytes"
 	"errors"
+
 	log "github.com/sirupsen/logrus"
 )
 

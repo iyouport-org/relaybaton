@@ -7,6 +7,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
 	"github.com/emirpasic/gods/maps/hashmap"
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/mholt/archiver"
@@ -14,12 +21,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpproxy"
-	"io"
-	"net"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
 )
 
 var reservedIP []*net.IPNet

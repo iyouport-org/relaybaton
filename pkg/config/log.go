@@ -2,8 +2,9 @@ package config
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"os"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type LogTOML struct {

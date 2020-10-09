@@ -2,14 +2,15 @@ package core
 
 import (
 	"fmt"
+	"io"
+	"net"
+	"sync"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpproxy"
 	"github.com/valyala/fasthttp/reuseport"
 	"golang.org/x/net/proxy"
-	"io"
-	"net"
-	"sync"
 )
 
 type HTTPServer struct {

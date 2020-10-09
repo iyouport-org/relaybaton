@@ -3,6 +3,7 @@ package log
 import (
 	"encoding/xml"
 	"fmt"
+
 	"github.com/sirupsen/logrus"
 )
 
