@@ -124,7 +124,10 @@ func (conn *Conn) Run() {
 		_, b, err := conn.remoteConn.ReadMessage()
 		if err != nil {
 			log.Error(err)
-			conn.remoteConn.Close()
+			err = conn.remoteConn.Close()
+			if err != nil {
+				log.Error(err)
+			}
 			return
 		}
 		if len(b) == 0 {
@@ -133,7 +136,10 @@ func (conn *Conn) Run() {
 		err = conn.localConn.AsyncWrite(b)
 		if err != nil {
 			log.Error(err)
-			conn.remoteConn.Close()
+			err = conn.remoteConn.Close()
+			if err != nil {
+				log.Error(err)
+			}
 			return
 		}
 	}
@@ -145,13 +151,19 @@ func (conn *Conn) DirectConnect() {
 		n, err := conn.tcpConn.Read(b)
 		if err != nil {
 			log.Error(err)
-			conn.tcpConn.Close()
+			err = conn.tcpConn.Close()
+			if err != nil {
+				log.Error(err)
+			}
 			return
 		}
 		err = conn.localConn.AsyncWrite(b[:n])
 		if err != nil {
 			log.Error(err)
-			conn.tcpConn.Close()
+			err = conn.tcpConn.Close()
+			if err != nil {
+				log.Error(err)
+			}
 			return
 		}
 	}
