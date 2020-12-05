@@ -99,6 +99,7 @@ func (server *Server) PostUser(c *gin.Context) {
 				Username:    request.Username,
 				Password:    base64.StdEncoding.EncodeToString(cryptKey),
 				TrafficUsed: 0,
+				PlanID:      1,
 				PlanStart:   time.Now(),
 				PlanReset:   time.Now(),
 				PlanEnd:     time.Now(),

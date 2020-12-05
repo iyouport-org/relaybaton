@@ -9,7 +9,7 @@ import (
 type PostUserRequest struct {
 	Username string `json:"username" validate:"required"`
 	Password string `json:"password" validate:"base64,required"`
-	Captcha  string `json:"captcha" validate:"numeric,gte=0,lte=99999,required"`
+	Captcha  string `json:"captcha" validate:"numeric,gte=0,lte=999999,required"`
 }
 
 type PostUserResponse struct {
