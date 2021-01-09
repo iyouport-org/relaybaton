@@ -48,7 +48,7 @@ func (dbt *DBToml) Init() (dbg *dbGo, err error) {
 		dbg.Type = DBTypeMySQL
 		dbg.DB, err = gorm.Open(mysql.Open(connStr), conf)
 	case "postgresql":
-		connStr = fmt.Sprintf("host=%s port=%d User=%s dbname=%s password=%s", dbt.Host, dbt.Port, dbt.Username, dbt.Database, dbt.Password)
+		connStr = fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s", dbt.Host, dbt.Port, dbt.Username, dbt.Database, dbt.Password)
 		dbg.Type = DBTypePostgreSQL
 		dbg.DB, err = gorm.Open(postgres.Open(connStr), conf)
 	case "sqlite3":
