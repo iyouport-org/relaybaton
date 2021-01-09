@@ -154,6 +154,11 @@ func (android *RelaybatonAndroid) Save(clientServer string, clientUser string, c
 
 func (android *RelaybatonAndroid) Shutdown() error {
 	android.cancelFunc()
+	err := lwipStack.Close()
+	if err != nil {
+		log.Error(err)
+		return &AndroidError{err}
+	}
 	return &AndroidError{android.app.Stop(android.ctx)}
 }
 
