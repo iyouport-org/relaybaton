@@ -8,17 +8,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
-	"time"
-
 	"github.com/fasthttp/websocket"
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/iyouport-org/relaybaton/pkg/socks5"
 	"github.com/iyouport-org/relaybaton/pkg/util"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
+	"net"
+	"net/http"
+	"net/url"
+	"time"
 )
 
 const (
