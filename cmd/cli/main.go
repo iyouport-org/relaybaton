@@ -5,7 +5,6 @@ import (
 	"os"
 	"runtime/debug"
 
-	_ "github.com/cloudflare/tls-tris"
 	"github.com/gin-gonic/gin"
 	"github.com/iyouport-org/relaybaton/internal/cmd/relaybaton"
 	log "github.com/sirupsen/logrus"

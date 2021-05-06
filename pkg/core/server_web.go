@@ -98,7 +98,6 @@ func (server *Server) PostUser(c *gin.Context) {
 			err = server.DB.DB.Create(&model.User{
 				Username:    request.Username,
 				Password:    base64.StdEncoding.EncodeToString(cryptKey),
-				PlanID:      1,
 				TrafficUsed: 0,
 				PlanID:      1,
 				PlanStart:   time.Now(),

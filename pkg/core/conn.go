@@ -54,15 +54,10 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 		Host:   conn.clientConf.Server + ":443",
 		Path:   "/",
 	}
-	esnikey, err := GetESNI(conn.clientConf.Server)
-	if err != nil {
-		log.Error(err)
-		return nil, err
-	}
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{
-			ClientESNIKeys: esnikey,
-			ServerName:     conn.clientConf.Server,
+			//ClientESNIKeys: esnikey,
+			ServerName: conn.clientConf.Server,
 		},
 		NetDial: func(network, addr string) (net.Conn, error) {
 			//c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
@@ -194,26 +189,6 @@ func (conn *Conn) buildHeader() (http.Header, error) {
 	header.Add("cmd", fmt.Sprintf("%d", conn.cmd))
 
 	return header, nil
-}
-
-func GetESNI(domain string) (*tls.ESNIKeys, error) {
-	txt, err := net.DefaultResolver.LookupTXT(context.Background(), "_esni."+domain)
-	if err != nil {
-		log.WithField("domain", domain).Error(err)
-		return nil, err
-	}
-	rawRecord := txt[0]
-	esniRecord, err := base64.StdEncoding.DecodeString(rawRecord)
-	if err != nil {
-		log.WithField("rawRecord", rawRecord).Error(err)
-		return nil, err
-	}
-	esniKey, err := tls.ParseESNIKeys(esniRecord)
-	if err != nil {
-		log.WithField("esniRecord", esniRecord).Error(err)
-		return nil, err
-	}
-	return esniKey, nil
 }
 
 func GetDstAddrFromRequest(request socks5.Request) (net.Addr, error) {
