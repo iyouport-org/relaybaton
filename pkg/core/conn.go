@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	relaybatondns "github.com/iyouport-org/relaybaton/pkg/dns"
+	"github.com/miekg/dns"
 	"net"
 	"net/http"
 	"net/url"
@@ -54,10 +56,26 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 		Host:   conn.clientConf.Server + ":443",
 		Path:   "/",
 	}
+	httpsrrs, err := relaybatondns.LookupHTTPS(conn.clientConf.Server)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	if len(httpsrrs) < 1 {
+		err := errors.New("No HTTPS Records")
+		log.Error(err)
+		return nil, err
+	}
+	echconfigs, err := getECHConfig(httpsrrs[0])
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{
-			//ClientESNIKeys: esnikey,
-			ServerName: conn.clientConf.Server,
+			ClientECHConfigs: echconfigs,
+			ECHEnabled:       true,
+			ServerName:       conn.clientConf.Server,
 		},
 		NetDial: func(network, addr string) (net.Conn, error) {
 			//c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
@@ -224,4 +242,18 @@ func GetDstAddrFromRequest(request socks5.Request) (net.Addr, error) {
 		log.WithField("aTyp", request.ATyp).Error(err)
 		return nil, err
 	}
+}
+
+func getECHConfig(httpsrr dns.HTTPS) ([]tls.ECHConfig, error) {
+	for _, v := range httpsrr.Value {
+		if v.Key().String() == "echconfig" {
+			echconfig, err := base64.StdEncoding.DecodeString(v.String())
+			if err != nil {
+				log.Error(err)
+				return nil, err
+			}
+			return tls.UnmarshalECHConfigs(echconfig)
+		}
+	}
+	return nil, errors.New("echconfig not found")
 }
