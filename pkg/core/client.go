@@ -66,16 +66,19 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, rou
 }
 
 func (client *Client) Run() error {
-	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port),
-		gnet.WithMulticore(true),
-		//gnet.WithReusePort(true),
-		gnet.WithLogger(log.StandardLogger()),
-		gnet.WithLoadBalancing(gnet.SourceAddrHash),
-		gnet.WithTCPKeepAlive(time.Minute))
-	if err != nil {
-		log.Error(err)
+	if client.Client.Port != 0 {
+		err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port),
+			gnet.WithMulticore(true),
+			//gnet.WithReusePort(true),
+			gnet.WithLogger(log.StandardLogger()),
+			gnet.WithLoadBalancing(gnet.SourceAddrHash),
+			gnet.WithTCPKeepAlive(time.Minute))
+		if err != nil {
+			log.Error(err)
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.Action) {
@@ -251,13 +254,17 @@ func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 
 func (client *Client) OnInitComplete(svr gnet.Server) (action gnet.Action) {
 	go func() {
-		err := client.httpServer.Serve()
-		log.Error(err)
+		if client.Client.HTTPPort != 0 {
+			err := client.httpServer.Serve()
+			log.Error(err)
+		}
 	}()
-	transparent := RedirServer{
-		Client: client,
+	if client.Client.RedirPort != 0 {
+		transparent := RedirServer{
+			Client: client,
+		}
+		go transparent.Run()
 	}
-	go transparent.Run()
 	go func() {
 		if !client.Client.ProxyAll {
 			err := client.router.Update()

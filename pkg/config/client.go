@@ -1,9 +1,9 @@
 package config
 
 type ClientTOML struct {
-	Port      int    `mapstructure:"port" toml:"port" validate:"numeric,gte=0,lte=65535,required,nefield=HTTPPort"`
-	HTTPPort  int    `mapstructure:"http_port" toml:"http_port" validate:"numeric,gte=0,lte=65535,required,nefield=RedirPort"`
-	RedirPort int    `mapstructure:"redir_port" toml:"redir_port" validate:"numeric,gte=0,lte=65535,required,nefield=Port"`
+	Port      int    `mapstructure:"port" toml:"port" validate:"numeric,gte=0,lte=65535"`
+	HTTPPort  int    `mapstructure:"http_port" toml:"http_port" validate:"numeric,gte=0,lte=65535"`
+	RedirPort int    `mapstructure:"redir_port" toml:"redir_port" validate:"numeric,gte=0,lte=65535"`
 	Server    string `mapstructure:"server"  toml:"server" validate:"hostname,required"`
 	Username  string `mapstructure:"username" toml:"username" validate:"required"`
 	Password  string `mapstructure:"password" toml:"password" validate:"required"`
