@@ -32,10 +32,16 @@ func (lt *LogTOML) Init() (lg *LogGo, err error) {
 			return nil, err
 		}
 	}
-	lg.File, err = os.OpenFile(lt.File, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0755)
-	if err != nil {
-		log.WithField("log.file", lt.File).Error(err)
-		return nil, err
+	if lt.File == "stdout" {
+		lg.File = os.Stdout
+	} else if lt.File == "stderr" {
+		lg.File = os.Stderr
+	} else {
+		lg.File, err = os.OpenFile(lt.File, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0755)
+		if err != nil {
+			log.WithField("log.file", lt.File).Error(err)
+			return nil, err
+		}
 	}
 	lg.Level, err = log.ParseLevel(lt.Level)
 	if err != nil {
