@@ -48,7 +48,7 @@ Cloudflare CDN will provide TLS encryption with ESNI extension.
 
 ### Server
 
-`sudo` is required for listening on port 80
+Root access is required for listening on port 80.
 
 ```bash
 sudo relaybation server --config /path/to/server/config.toml
