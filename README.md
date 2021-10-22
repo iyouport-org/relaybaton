@@ -2,6 +2,8 @@
 
 A pluggable transport to circumvent Internet censorship with Encrypted SNI.
 
+The project will be updated following the adoption of ECH.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GoDoc](https://godoc.org/github.com/iyouport-org/relaybaton?status.svg)](https://pkg.go.dev/github.com/iyouport-org/relaybaton)
 [![Go Report Card](https://goreportcard.com/badge/github.com/iyouport-org/relaybaton)](https://goreportcard.com/report/github.com/iyouport-org/relaybaton)

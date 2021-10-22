@@ -8,17 +8,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
-	"time"
-
 	"github.com/fasthttp/websocket"
 	"github.com/iyouport-org/relaybaton/pkg/config"
 	"github.com/iyouport-org/relaybaton/pkg/socks5"
 	"github.com/iyouport-org/relaybaton/pkg/util"
 	"github.com/panjf2000/gnet"
 	log "github.com/sirupsen/logrus"
+	"net"
+	"net/http"
+	"net/url"
+	"time"
 )
 
 const (
@@ -65,7 +64,8 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 			ServerName:     conn.clientConf.Server,
 		},
 		NetDial: func(network, addr string) (net.Conn, error) {
-			c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
+			//c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
+			c, err := net.DialTimeout(network, conn.clientConf.Server+":443", 15*time.Second)
 			if err != nil {
 				return nil, err
 			}
@@ -79,7 +79,8 @@ func (conn *Conn) DialWs(request socks5.Request) (http.Header, error) {
 			}, nil
 		},
 		NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
+			//c, err := net.DialTimeout(network, "1.1.1.1:443", 15*time.Second)
+			c, err := net.DialTimeout(network, conn.clientConf.Server+":443", 15*time.Second)
 			if err != nil {
 				return nil, err
 			}
@@ -124,10 +125,7 @@ func (conn *Conn) Run() {
 		_, b, err := conn.remoteConn.ReadMessage()
 		if err != nil {
 			log.Error(err)
-			err = conn.remoteConn.Close()
-			if err != nil {
-				log.Error(err)
-			}
+			conn.Close()
 			return
 		}
 		if len(b) == 0 {
@@ -136,10 +134,7 @@ func (conn *Conn) Run() {
 		err = conn.localConn.AsyncWrite(b)
 		if err != nil {
 			log.Error(err)
-			err = conn.remoteConn.Close()
-			if err != nil {
-				log.Error(err)
-			}
+			conn.Close()
 			return
 		}
 	}
@@ -151,20 +146,35 @@ func (conn *Conn) DirectConnect() {
 		n, err := conn.tcpConn.Read(b)
 		if err != nil {
 			log.Error(err)
-			err = conn.tcpConn.Close()
-			if err != nil {
-				log.Error(err)
-			}
+			conn.Close()
 			return
 		}
 		err = conn.localConn.AsyncWrite(b[:n])
 		if err != nil {
 			log.Error(err)
-			err = conn.tcpConn.Close()
-			if err != nil {
-				log.Error(err)
-			}
+			conn.Close()
 			return
+		}
+	}
+}
+
+func (conn *Conn) Close() {
+	if conn.localConn != nil {
+		err := conn.localConn.Close()
+		if err != nil {
+			log.Error(err)
+		}
+	}
+	if conn.remoteConn != nil {
+		cErr := conn.remoteConn.Close()
+		if cErr != nil {
+			log.Error(cErr)
+		}
+	}
+	if conn.tcpConn != nil {
+		cErr := conn.tcpConn.Close()
+		if cErr != nil {
+			log.Error(cErr)
 		}
 	}
 }

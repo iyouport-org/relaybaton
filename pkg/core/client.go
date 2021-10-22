@@ -68,7 +68,7 @@ func NewClient(lc fx.Lifecycle, conf *config.ConfigGo, pool *goroutine.Pool, rou
 func (client *Client) Run() error {
 	err := gnet.Serve(client, fmt.Sprintf("tcp://:%d", client.Client.Port),
 		gnet.WithMulticore(true),
-		gnet.WithReusePort(true),
+		//gnet.WithReusePort(true),
 		gnet.WithLogger(log.StandardLogger()),
 		gnet.WithLoadBalancing(gnet.SourceAddrHash),
 		gnet.WithTCPKeepAlive(time.Minute))
@@ -154,7 +154,7 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 				}
 				conn.status = StatusAccepted
 				return out, gnet.None
-			} else {
+			} else { //direct
 				conn.tcpConn, err = net.Dial("tcp", conn.dstAddr.String())
 				if err != nil {
 					log.WithField("Dst Addr", conn.dstAddr.String()).Error(err)
@@ -176,7 +176,7 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 			var err error
 			if client.router.Select(conn.dstAddr.(*net.TCPAddr).IP) {
 				err = conn.remoteConn.WriteMessage(websocket.BinaryMessage, frame)
-			} else {
+			} else { //direct
 				_, err = conn.tcpConn.Write(frame)
 			}
 			if err != nil {
@@ -187,7 +187,7 @@ func (client *Client) React(frame []byte, c gnet.Conn) (out []byte, action gnet.
 		default:
 			//TODO
 		}
-		return
+		return nil, gnet.None
 	}
 }
 
@@ -210,18 +210,21 @@ func (client *Client) HandleMethodRequest(data []byte) (b []byte, action gnet.Ac
 		mRep = socks5.NewMethodReply(socks5.MethodNoAuthRequired)
 	}
 	b = mRep.Encode()
-	return
+	return b, gnet.None
 }
 
 func (client *Client) OnOpened(c gnet.Conn) (out []byte, action gnet.Action) {
 	conn := NewConn(c, client.Client)
 	client.conns.Put(conn)
-	return
+	return out, gnet.None
 }
 
 func (client *Client) OnClosed(c gnet.Conn, err error) (action gnet.Action) {
 	if err != nil {
-		log.Error(err)
+		log.WithFields(log.Fields{
+			"localAddr":  c.LocalAddr().String(),
+			"remoteAddr": c.RemoteAddr().String(),
+		}).Error(err)
 	}
 	key := GetURI(c.RemoteAddr())
 	conn, ok := client.conns.Get(key)
